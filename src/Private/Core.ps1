@@ -194,6 +194,9 @@ function Add-Artifact {
 }
 function Test-AllowedLocalPath {
     param([string]$Path)
+    # Local Win32 extended/device paths are not UNC shares. Extended UNC stays gated.
+    if($Path-match'^\\\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy\d+\\'){return $true}
+    if($Path-match'^\\\\\?\\[A-Za-z]:\\'){$Path=$Path.Substring(4)}
     # Network/domain opt-ins also govern UNC targets embedded in local configuration.
     if($script:Context.IncludeNetwork -or $script:Context.IncludeDomain){return $true}
     if($Path -match '^[\\/]{2}' -or $Path -match '^[^:]+::[\\/]{2}'){

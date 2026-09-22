@@ -16,6 +16,7 @@ namespace StealthPrivesc {
         [StructLayout(LayoutKind.Sequential)] struct SidAttributes { public IntPtr Sid; public uint Attributes; }
         [StructLayout(LayoutKind.Sequential)] struct TokenGroups { public uint Count; public SidAttributes First; }
         [StructLayout(LayoutKind.Sequential)] struct Mapping { public uint Read, Write, Execute, All; }
+        [StructLayout(LayoutKind.Sequential)] struct ObjectType { public ushort Level, Reserved; public IntPtr Type; }
         [StructLayout(LayoutKind.Sequential)] struct LsaString { public ushort Length, MaximumLength; public IntPtr Buffer; }
         [StructLayout(LayoutKind.Sequential)] struct LsaAttributes { public uint Length; public IntPtr RootDirectory, ObjectName; public uint Attributes; public IntPtr SecurityDescriptor, SecurityQualityOfService; }
         [DllImport("kernel32.dll", SetLastError=true)] static extern bool CloseHandle(IntPtr handle);
@@ -23,10 +24,12 @@ namespace StealthPrivesc {
         [DllImport("advapi32.dll", SetLastError=true)] static extern bool DuplicateToken(IntPtr token, int level, out IntPtr duplicate);
         [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool LookupPrivilegeName(string system, ref Luid luid, StringBuilder name, ref int length);
         [DllImport("advapi32.dll", SetLastError=true)] static extern bool AccessCheck(byte[] descriptor, IntPtr token, uint access, ref Mapping mapping, IntPtr privileges, ref uint size, out uint granted, out bool allowed);
+        [DllImport("advapi32.dll", SetLastError=true)] static extern bool AccessCheckByType(byte[] descriptor,byte[] self,IntPtr token,uint access,[In] ObjectType[] types,uint count,ref Mapping mapping,IntPtr privileges,ref uint size,out uint granted,out bool allowed);
         [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern IntPtr OpenSCManager(string machine, string database, uint access);
         [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern IntPtr OpenService(IntPtr manager, string name, uint access);
         [DllImport("advapi32.dll", SetLastError=true)] static extern bool CloseServiceHandle(IntPtr handle);
         [DllImport("kernel32.dll", SetLastError=true)] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+        [DllImport("kernel32.dll", SetLastError=true)] static extern IntPtr OpenThread(uint access, bool inherit, uint tid);
         [DllImport("advapi32.dll")] static extern uint LsaOpenPolicy(IntPtr system, ref LsaAttributes attributes, uint access, out IntPtr policy);
         [DllImport("advapi32.dll")] static extern uint LsaEnumerateAccountRights(IntPtr policy, byte[] sid, out IntPtr rights, out uint count);
         [DllImport("advapi32.dll")] static extern uint LsaNtStatusToWinError(uint status);
@@ -78,11 +81,15 @@ namespace StealthPrivesc {
             }
         }
         public static AccessResult CheckAccess(byte[] descriptor, uint desired, bool registry) {
+            return registry ? CheckObjectAccess(descriptor,desired,0x20019,0x20006,0x20019,0xf003f)
+                : CheckObjectAccess(descriptor,desired,0x120089,0x120116,0x1200a0,0x1f01ff);
+        }
+        public static AccessResult CheckObjectAccess(byte[] descriptor, uint desired, uint read, uint write, uint execute, uint all) {
             using(WindowsIdentity identity=WindowsIdentity.GetCurrent()) {
                 IntPtr token;
                 if(!DuplicateToken(identity.Token,2,out token)) throw new Win32Exception(Marshal.GetLastWin32Error());
                 try {
-                    Mapping map = registry ? new Mapping { Read=0x20019, Write=0x20006, Execute=0x20019, All=0xf003f } : new Mapping { Read=0x120089, Write=0x120116, Execute=0x1200a0, All=0x1f01ff };
+                    Mapping map = new Mapping { Read=read, Write=write, Execute=execute, All=all };
                     uint size=1024, granted; bool allowed; IntPtr buffer=Marshal.AllocHGlobal((int)size);
                     try {
                         bool ok=AccessCheck(descriptor,token,desired,ref map,buffer,ref size,out granted,out allowed);
@@ -108,10 +115,30 @@ namespace StealthPrivesc {
                 CloseServiceHandle(service); return new AccessResult { Allowed=true };
             } finally { CloseServiceHandle(manager); }
         }
+        public static AccessResult CheckDirectoryAccess(byte[] descriptor,uint desired,Guid objectClass,Guid right,byte[] principalSelf) {
+            using(var identity=WindowsIdentity.GetCurrent()){
+                IntPtr token;if(!DuplicateToken(identity.Token,2,out token))throw new Win32Exception(Marshal.GetLastWin32Error());
+                IntPtr classMemory=Marshal.AllocHGlobal(16),rightMemory=Marshal.AllocHGlobal(16),privileges=Marshal.AllocHGlobal(4096);
+                try{
+                    Marshal.StructureToPtr(objectClass,classMemory,false);Marshal.StructureToPtr(right,rightMemory,false);
+                    var types=right==Guid.Empty?new ObjectType[]{new ObjectType{Level=0,Type=classMemory}}:
+                        new ObjectType[]{new ObjectType{Level=0,Type=classMemory},new ObjectType{Level=1,Type=rightMemory}};
+                    var mapping=new Mapping{Read=0x20094,Write=0x20028,Execute=0x20004,All=0xf01ff};
+                    uint size=4096,granted;bool allowed;
+                    bool ok=AccessCheckByType(descriptor,principalSelf,token,desired,types,(uint)types.Length,ref mapping,privileges,ref size,out granted,out allowed);
+                    return new AccessResult{Allowed=ok && allowed,Error=ok?0:Marshal.GetLastWin32Error()};
+                }finally{Marshal.FreeHGlobal(classMemory);Marshal.FreeHGlobal(rightMemory);Marshal.FreeHGlobal(privileges);CloseHandle(token);}
+            }
+        }
         public static AccessResult ProcessAccess(uint pid, uint access) {
             IntPtr process=OpenProcess(access,false,pid);
             if(process==IntPtr.Zero) return new AccessResult { Error=Marshal.GetLastWin32Error() };
             CloseHandle(process); return new AccessResult { Allowed=true };
+        }
+        public static AccessResult ThreadAccess(uint tid,uint access) {
+            IntPtr thread=OpenThread(access,false,tid);
+            if(thread==IntPtr.Zero)return new AccessResult{Error=Marshal.GetLastWin32Error()};
+            CloseHandle(thread);return new AccessResult{Allowed=true};
         }
         public static string[] AccountRights(string sidText) {
             var attributes=new LsaAttributes(); attributes.Length=(uint)Marshal.SizeOf(typeof(LsaAttributes));

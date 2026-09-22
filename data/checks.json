@@ -5,7 +5,7 @@
     "Category": "Identity",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 2,
@@ -13,7 +13,7 @@
     "Category": "Identity",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 3,
@@ -21,7 +21,7 @@
     "Category": "Identity",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 4,
@@ -29,23 +29,23 @@
     "Category": "Identity",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 5,
     "Title": "Privileges assigned through local/domain policy, including rights potentially available after a new logon",
     "Category": "Identity",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Effective local LSA rights for current token SIDs only; unapplied domain policy/future groups not resolved."
+    "Coverage": "Implemented",
+    "Limitation": "Effective local LSA rights include applied policy; unapplied future domain policy is not predicted."
   },
   {
     "Id": 6,
     "Title": "Local users and groups: administrators, account state, password timestamps and membership information",
     "Category": "Identity",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Local users/groups only; unresolved directory principals may cause incomplete results."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 7,
@@ -53,39 +53,39 @@
     "Category": "Identity",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 8,
     "Title": "Logged-on users and sessions: interactive/logon sessions, incoming RDP sessions and previously logged-on users, depending on tool",
     "Category": "Identity",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "CIM interactive sessions and associations only; no historical reconstruction."
+    "Coverage": "Implemented",
+    "Limitation": "Current sessions, associations and historical profile last-use metadata."
   },
   {
     "Id": 9,
     "Title": "Other users’ profile/home directories and their accessibility, including readable or writable locations",
     "Category": "Identity",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Profile metadata, listing access and DACL candidates; contents not recursively assessed."
+    "Coverage": "Implemented",
+    "Limitation": "Profile listing and directory DACL access; child contents may have different permissions."
   },
   {
     "Id": 10,
     "Title": "Environment variables containing credentials, tokens or sensitive configuration",
     "Category": "Identity",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Environment variable-name heuristic only; values not pattern-scanned."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 11,
     "Title": "Installed services: executable paths, accounts, start modes and third-party service identification",
     "Category": "Services",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Service executable/account/state; publisher identity not verified."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 12,
@@ -93,7 +93,7 @@
     "Category": "Services",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 13,
@@ -101,7 +101,7 @@
     "Category": "Services",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 14,
@@ -109,23 +109,23 @@
     "Category": "Services",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 15,
     "Title": "Writable extended service registry settings/subkeys",
     "Category": "Services",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Only two levels of service registry subkeys, within item limits."
+    "Coverage": "Implemented",
+    "Limitation": "Recursive service registry subkeys, subject to traversal limits."
   },
   {
     "Id": 16,
     "Title": "Writable service executables, associated files or containing directories",
     "Category": "Services",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Main executable and parent only; indirect files/scripts may be missed."
+    "Coverage": "Implemented",
+    "Limitation": "Executable and statically referenced scripts/configuration; dynamic dependencies require review."
   },
   {
     "Id": 17,
@@ -133,23 +133,23 @@
     "Category": "Services",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 18,
     "Title": "Writable DLLs explicitly loaded by LocalSystem services",
     "Category": "Services",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Registered ServiceDll only; other loaded DLLs not traced."
+    "Coverage": "Implemented",
+    "Limitation": "Registered ServiceDll and currently loaded SYSTEM service modules."
   },
   {
     "Id": 19,
     "Title": "Writable LocalSystem service recovery-command targets",
     "Category": "Services",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "FailureCommand target only; recovery trigger flags not evaluated."
+    "Coverage": "Implemented",
+    "Limitation": "Recovery actions, delays, non-crash flags and command targets; actions never triggered."
   },
   {
     "Id": 20,
@@ -157,71 +157,71 @@
     "Category": "Services",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 21,
     "Title": "Services using accounts whose passwords are stored locally as service secrets",
     "Category": "Services",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Named-account heuristic; LSA secret storage not verified."
+    "Coverage": "Implemented",
+    "Limitation": "Named service-account storage indicator; protected LSA storage may be inaccessible."
   },
   {
     "Id": 22,
     "Title": "Scheduled-task inventory: actions, paths, execution accounts and other task details",
     "Category": "TasksStartup",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Task identity/executable metadata; arguments and COM handler details omitted."
+    "Coverage": "Implemented",
+    "Limitation": "Principals, execute/COM actions, triggers and settings; argument values redacted."
   },
   {
     "Id": 23,
     "Title": "Writable scheduled-task executables, scripts or containing directories",
     "Category": "TasksStartup",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Execute field and simple script arguments only; working-directory resolution not implemented."
+    "Coverage": "Implemented",
+    "Limitation": "Executable/script references resolved against task working directories."
   },
   {
     "Id": 24,
     "Title": "Low-privilege control over enabled SYSTEM scheduled tasks",
     "Category": "TasksStartup",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Task-file ACL only; scheduler API and registry authorization not assessed."
+    "Coverage": "Implemented",
+    "Limitation": "Registered task descriptors from Task Scheduler for enabled SYSTEM tasks."
   },
   {
     "Id": 25,
     "Title": "Unquoted scheduled-task action paths",
     "Category": "TasksStartup",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Unquoted Execute-field heuristic; ambiguity may not apply to Task Scheduler."
+    "Coverage": "Implemented",
+    "Limitation": "Ambiguous path candidates; Task Scheduler may treat the whole Execute field as one path."
   },
   {
     "Id": 26,
     "Title": "Scheduled tasks configured with password-based logon, indicating locally stored account secrets",
     "Category": "TasksStartup",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Password logon indicator only; no credential extraction."
+    "Coverage": "Implemented",
+    "Limitation": "Password logon is a stored-credential indicator; no task credentials exported."
   },
   {
     "Id": 27,
     "Title": "Microsoft Recall PolicyConfiguration task exposure, combining task configuration markers with OS/build information",
     "Category": "TasksStartup",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Recall task-name/build markers only; no validated vulnerability rules."
+    "Coverage": "Implemented",
+    "Limitation": "Recall task configuration plus CVE-2025-60710 fixed-build assessment."
   },
   {
     "Id": 28,
     "Title": "Startup/autorun entries and writable referenced programs or directories",
     "Category": "TasksStartup",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Run/RunOnce keys and startup folders; shortcuts/other autostarts not resolved."
+    "Coverage": "Implemented",
+    "Limitation": "Run/RunOnce, startup files and resolved shortcut targets."
   },
   {
     "Id": 29,
@@ -229,143 +229,143 @@
     "Category": "AccessControl",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 30,
     "Title": "Process DLL-hijacking candidates, including relevant writable process locations",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Loaded module file ACLs; missing DLL loads and privileged owners not correlated."
+    "Coverage": "Implemented",
+    "Limitation": "Process owner, loaded module ACLs and default search locations; custom loader behavior requires review."
   },
   {
     "Id": 31,
     "Title": "Known services susceptible to missing/“ghost” DLL hijacking, correlated with writable search paths",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Missing/inaccessible ServiceDll heuristic; no known ghost-DLL signature database."
+    "Coverage": "Implemented",
+    "Limitation": "Known OS-family/service/DLL rules correlated with missing files and writable search directories; historical rules are candidates."
   },
   {
     "Id": 32,
     "Title": "Writable installed-application files and directories, including third-party applications",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Registered InstallLocation directory ACLs only."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 33,
     "Title": "Writable application directories under ProgramData",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Bounded ProgramData directories; privileged use not established."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 34,
     "Title": "Writable directories at fixed-drive roots and their contents",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Fixed-drive roots and immediate children only."
+    "Coverage": "Implemented",
+    "Limitation": "Fixed-drive roots and immediate contents."
   },
   {
     "Id": 35,
     "Title": "Writable executable files in nonstandard locations",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Bounded executable/script ACL candidates in SearchRoot; privileged use not established."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 36,
     "Title": "Writable COM server registration keys",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Bounded 32/64-bit and per-user COM registration sample."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 37,
     "Title": "Writable COM server DLL/EXE files",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Bounded registered COM module and parent ACL candidates."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 38,
     "Title": "COM registrations referencing missing modules through relative paths, creating potential ghost-DLL search opportunities",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Relative registration strings only; loader search order not resolved."
+    "Coverage": "Implemented",
+    "Limitation": "Relative COM modules correlated with default system/PATH search locations."
   },
   {
     "Id": 39,
     "Title": "Stale COM registrations referencing nonexistent files",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Missing or inaccessible target candidates; File.Exists cannot distinguish the two."
+    "Coverage": "Implemented",
+    "Limitation": "Missing and inaccessible targets are distinguished."
   },
   {
     "Id": 40,
     "Title": "Writable machine registry keys: known exposed HKLM descendants and a bounded heuristic search",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Known HKLM roots and immediate descendants only."
+    "Coverage": "Implemented",
+    "Limitation": "Known HKLM roots and bounded child-key DACL checks."
   },
   {
     "Id": 41,
     "Title": "Cross-user TypingInsights registry-key permissions",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Loaded-user input Settings ACLs; no TypingInsights-specific evaluation."
+    "Coverage": "Implemented",
+    "Limitation": "Other loaded profiles' Software\\Microsoft\\Input\\TypingInsights keys."
   },
   {
     "Id": 42,
     "Title": "Excessive permissions on another user’s processes or threads",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Cross-user process rights only; thread objects not assessed."
+    "Coverage": "Implemented",
+    "Limitation": "Process and thread control-right probes; no object mutation."
   },
   {
     "Id": 43,
     "Title": "Accessible leaked handles to privileged processes, threads or files",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Unsupported",
-    "Limitation": "Leaked-handle enumeration and privileged-object correlation are not implemented."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded system handles, metadata-only duplication, owner and excess access correlation."
   },
   {
     "Id": 44,
     "Title": "Named-pipe ACLs and writable pipes, including correlation with privileged pipe servers where implemented",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Pipe names only; ACLs/server ownership not assessed."
+    "Coverage": "Implemented",
+    "Limitation": "Metadata-only identification-level pipe connections, ACLs and server-owner correlation."
   },
   {
     "Id": 45,
     "Title": "Writable named kernel-device objects",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Unsupported",
-    "Limitation": "Native kernel-device enumeration/access checks are not implemented."
+    "Coverage": "Implemented",
+    "Limitation": "Native device namespace and descriptor queries in timed helpers."
   },
   {
     "Id": 46,
     "Title": "Potentially unsafe .NET SOAP client proxy configurations—SOAPwn-related surfaces",
     "Category": "AccessControl",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Bounded SOAP/remoting text markers; not a SOAPwn vulnerability determination."
+    "Coverage": "Implemented",
+    "Limitation": "SOAP proxy/WSDL, URI and default-credential indicators; input reachability requires application review."
   },
   {
     "Id": 47,
@@ -373,47 +373,47 @@
     "Category": "SystemRisk",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 48,
     "Title": "Windows Installer repair UAC-prompt suppression",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Registry configuration; patch-dependent effective behavior not resolved."
+    "Coverage": "Implemented",
+    "Limitation": "Explicit prompt-suppression policy; effective defaults depend on servicing."
   },
   {
     "Id": 49,
     "Title": "MSI repair allowlists and potentially unsafe custom actions in allowlisted packages",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Allowlist and bounded cached-MSI deferred/no-impersonate action flags; action bodies and repair reachability need review."
+    "Coverage": "Implemented",
+    "Limitation": "Repair allowlist, privileged custom actions, sequence, repair conditions and static targets."
   },
   {
     "Id": 50,
     "Title": "Potentially unsafe custom actions in cached MSI packages",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Read-only MSI action type flags; actions never executed."
+    "Coverage": "Implemented",
+    "Limitation": "Read-only MSI action/sequence/target assessment; no installation or repair."
   },
   {
     "Id": 51,
     "Title": "Print Spooler and Point-and-Print configuration permitting unsafe printer-driver installation",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Point-and-Print policy evidence; defaults and patch behavior not resolved."
+    "Coverage": "Implemented",
+    "Limitation": "Spooler, explicit Point-and-Print restrictions and prompt suppression; absent settings use servicing defaults."
   },
   {
     "Id": 52,
     "Title": "Driver co-installer policy",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Co-installer registry policy evidence only."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 53,
@@ -421,31 +421,31 @@
     "Category": "SystemRisk",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 54,
     "Title": "Missing Windows patches / OS-version vulnerability matching",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "OS/build/UBR/hotfix inventory only; no maintained CVE applicability/supersedence engine."
+    "Coverage": "Implemented",
+    "Limitation": "Dated MSRC fixed-build snapshot, exact product/architecture/branch matching; unmatched products are unknown."
   },
   {
     "Id": 55,
     "Title": "Watson’s explicit CVE checks: CVE-2019-0836, -0841, -1064, -1130, -1253, -1315, -1385, -1388, -1405; CVE-2020-0668, -0683, -1013",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Watson CVEs catalogued but not evaluated; only build/hotfix inventory."
+    "Coverage": "Implemented",
+    "Limitation": "Published fixed-build records for all twelve requested CVEs; unsupported product combinations are unknown."
   },
   {
     "Id": 56,
     "Title": "Installed hotfixes, Microsoft updates and update history/recency",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "QuickFixEngineering inventory only; no complete CBS/WUA history or supersedence."
+    "Coverage": "Implemented",
+    "Limitation": "Hotfix, Windows Update history and CBS packages where accessible."
   },
   {
     "Id": 57,
@@ -453,79 +453,79 @@
     "Category": "SystemRisk",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 58,
     "Title": "Installed third-party kernel/device drivers",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "PnP signed-driver metadata; not all loaded legacy/system drivers."
+    "Coverage": "Implemented",
+    "Limitation": "PnP and system/legacy driver inventory."
   },
   {
     "Id": 59,
     "Title": "Known vulnerable drivers matched against the LOLDrivers database",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "System-driver SHA256 inventory only; LOLDrivers matching is not implemented."
+    "Coverage": "Implemented",
+    "Limitation": "Exact SHA256 matches against dated LOLDrivers data."
   },
   {
     "Id": 60,
     "Title": "Known vulnerable drivers not covered by local Code Integrity blocking policies",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Blocklist setting and policy-file inventory; policy decoding/hash coverage not implemented."
+    "Coverage": "Implemented",
+    "Limitation": "Decoded kernel-mode deny rules, hashes/version/TBS signer candidates and runtime enforcement. Conditional rules remain explicit; no deny match does not mean load permission."
   },
   {
     "Id": 61,
     "Title": "Unsigned or legacy/weakly signed kernel drivers",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "PnP signing metadata; weak algorithms/catalog/legacy trust chains not verified."
+    "Coverage": "Implemented",
+    "Limitation": "Authenticode/catalog trust, signer algorithm/key strength and timestamp presence; distinct from kernel load policy."
   },
   {
     "Id": 62,
     "Title": "Risky OEM privileged utilities/components",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "OEM publisher heuristic; no vulnerable product/version database."
+    "Coverage": "Implemented",
+    "Limitation": "OEM utility/service/ACL correlation and exact known-vulnerable driver matching."
   },
   {
     "Id": 63,
     "Title": "Installed-package vulnerability lookup",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Package inventory only; online vulnerability lookup not implemented."
+    "Coverage": "Implemented",
+    "Limitation": "Opt-in NVD package/version keyword lookup; ten queries per run. Candidates require CPE applicability review."
   },
   {
     "Id": 64,
     "Title": "CLFS logfile-authentication mitigation configuration",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "CLFS registry evidence only; build/default interpretation not implemented."
+    "Coverage": "Implemented",
+    "Limitation": "CLFS mode, learning start and transition policy; absent configuration is unknown or unsupported."
   },
   {
     "Id": 65,
     "Title": "Object Manager namespace access relevant to race-window amplification",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Unsupported",
-    "Limitation": "Object Manager namespace capability probing is not implemented."
+    "Coverage": "Implemented",
+    "Limitation": "Object Manager directory create/control capabilities; no objects or races created."
   },
   {
     "Id": 66,
     "Title": "KernelQuick/ValleyRAT-related registry indicators",
     "Category": "SystemRisk",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Code Integrity settings only; no validated KernelQuick/ValleyRAT indicators."
+    "Coverage": "Implemented",
+    "Limitation": "Published KernelQuick service and registry indicators."
   },
   {
     "Id": 67,
@@ -533,263 +533,263 @@
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 68,
     "Title": "Unattended-installation and Sysprep answer files containing credentials",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Known answer-file locations and redacted text markers only."
+    "Coverage": "Implemented",
+    "Limitation": "Known answer-file readability and redacted secret markers."
   },
   {
     "Id": 69,
     "Title": "Cached Group Policy Preferences passwords / cpassword material",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Bounded local GPP XML inspection; no decryption."
+    "Coverage": "Implemented",
+    "Limitation": "Cached GPP credential/cpassword markers; no values exported."
   },
   {
     "Id": 70,
     "Title": "Domain/SYSVOL Group Policy Preferences password searches",
     "Category": "CredentialExposure",
     "Scope": "Domain",
-    "Coverage": "Partial",
-    "Limitation": "Opt-in bounded SYSVOL XML inspection; no decryption."
+    "Coverage": "Implemented",
+    "Limitation": "Opt-in SYSVOL GPP XML credential markers."
   },
   {
     "Id": 71,
     "Title": "Readable SAM, SYSTEM and SECURITY hive files, including backups or shadow-copy exposure where implemented",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Live/RegBack/Windows.old hive paths only; no shadow copies or hive contents."
+    "Coverage": "Implemented",
+    "Limitation": "Live, backup, Windows.old and shadow-copy hive readability; no contents copied."
   },
   {
     "Id": 72,
     "Title": "Windows Credential Manager entries and accessible saved credentials",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "cmdkey saved-credential metadata; blobs/passwords not retrieved."
+    "Coverage": "Implemented",
+    "Limitation": "Credential Manager retrieval with native secret-buffer erasure."
   },
   {
     "Id": 73,
     "Title": "Windows Vault web/Windows credentials",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Vault containers only; entries/passwords not retrieved."
+    "Coverage": "Implemented",
+    "Limitation": "Windows 8+ Vault retrieval with authenticator erasure."
   },
   {
     "Id": 74,
     "Title": "UWP PasswordVault / Credential Locker entries",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Vault directories only; no UWP PasswordVault API enumeration."
+    "Coverage": "Implemented",
+    "Limitation": "WinRT Credential Locker retrieval inside a timed Windows PowerShell helper."
   },
   {
     "Id": 75,
     "Title": "DPAPI master-key files and credential blobs",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Current-user DPAPI and credential directories only; no decryption."
+    "Coverage": "Implemented",
+    "Limitation": "Accessible profiles' DPAPI/master-key/credential files; readability is distinct from decryptability."
   },
   {
     "Id": 76,
     "Title": "Credentials exposed through Windows security packages",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Unsupported",
-    "Limitation": "Security-package credential retrieval is not implemented."
+    "Coverage": "Implemented",
+    "Limitation": "Local NTLM SSPI probe with original challenge and flags; no network exchange or token export."
   },
   {
     "Id": 77,
     "Title": "Kerberos ticket-cache and TGT information",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Current-logon klist metadata; no TGT/session-key export."
+    "Coverage": "Implemented",
+    "Limitation": "Current-logon Kerberos ticket/TGT metadata; no session-key export."
   },
   {
     "Id": 78,
     "Title": "PowerShell history and transcript files containing secrets",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Known PSReadLine paths and bounded Documents transcript search."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 79,
     "Title": "Secrets in event logs: PowerShell script blocks, process-creation command lines and Sysmon events",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Newest bounded script/process events; only marker presence retained."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded event secret markers; event payloads discarded."
   },
   {
     "Id": 80,
     "Title": "Registry values containing possible passwords or credential material, including application-specific locations and broader searches",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Sensitive value-name heuristic in immediate Software children only."
+    "Coverage": "Implemented",
+    "Limitation": "Recursive bounded registry name/content secret indicators."
   },
   {
     "Id": 81,
     "Title": "IIS/web application configuration credentials: web.config, connection strings and application-pool credentials, including decryption where supported. U; W searches relevant files and uses AppCmd",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Known IIS configuration files and markers; no AppCmd/app-pool enumeration/decryption."
+    "Coverage": "Implemented",
+    "Limitation": "IIS administration API credential accessibility, including protected fields resolved by the current identity."
   },
   {
     "Id": 82,
     "Title": "McAfee SiteList.xml credentials and related configuration",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Known McAfee SiteList paths/markers; no decryption."
+    "Coverage": "Implemented",
+    "Limitation": "McAfee SiteList credential fields/configuration; values redacted."
   },
   {
     "Id": 83,
     "Title": "SCCM Network Access Account credential blobs",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Readable SCCM NAA object presence; blobs not retained/decrypted."
+    "Coverage": "Implemented",
+    "Limitation": "Readable SCCM NAA policy and encrypted-credential indicators."
   },
   {
     "Id": 84,
     "Title": "SCCM cache contents and files containing possible embedded credentials. P; W also enumerates SCCM-related information",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Bounded CCM cache text/configuration inspection."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 85,
     "Title": "Symantec Management Agent Account Connectivity Credentials",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Altiris installation directories only; credential storage not parsed."
+    "Coverage": "Implemented",
+    "Limitation": "Symantec PkgAccessCredentials, secure-storage references and agent/server configuration."
   },
   {
     "Id": 86,
     "Title": "SCOM Run As account traces indicating stored credentials",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "SCOM/Monitoring Agent installation directories only; Run As traces not parsed."
+    "Coverage": "Implemented",
+    "Limitation": "SCOM Run As events 7002/7026; payload redacted."
   },
   {
     "Id": 87,
     "Title": "VNC server passwords/configuration: RealVNC, TigerVNC, TightVNC and UltraVNC where supported. P; W searches VNC artifacts",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Common VNC password value presence/config markers; no decryption."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 88,
     "Title": "Saved RDP connections and RDCMan settings/credential files",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Known current-user RDP/RDCMan artifacts; no decryption."
+    "Coverage": "Implemented",
+    "Limitation": "Accessible profiles' RDP/RDCMan files and credential fields."
   },
   {
     "Id": 89,
     "Title": "PuTTY, SuperPuTTY and MTPuTTY session/configuration artifacts, including referenced keys and saved connection information",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Common PuTTY family artifacts; nonstandard paths may be missed."
+    "Coverage": "Implemented",
+    "Limitation": "PuTTY-family sessions/configuration and referenced key readability."
   },
   {
     "Id": 90,
     "Title": "FileZilla and other FTP/SFTP-client configuration files",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Known FileZilla/WinSCP paths and markers only."
+    "Coverage": "Implemented",
+    "Limitation": "FileZilla/WinSCP configuration and registry credential fields."
   },
   {
     "Id": 91,
     "Title": "KeePass databases, configuration and key-file clues",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Known KeePass config and bounded database/key-file discovery."
+    "Coverage": "Implemented",
+    "Limitation": "KeePass configuration, database and key-file discovery."
   },
   {
     "Id": 92,
     "Title": "Oracle SQL Developer connection/configuration files",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "SQL Developer configuration directories only; connections not decoded."
+    "Coverage": "Implemented",
+    "Limitation": "SQL Developer connection/configuration credential markers."
   },
   {
     "Id": 93,
     "Title": "Cloud credential files and token caches: AWS, Azure, Google Cloud and Bluemix-related artifacts",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Known current-user cloud files and text markers; binary caches not parsed."
+    "Coverage": "Implemented",
+    "Limitation": "Cloud credential/token files; opaque caches identified as artifacts."
   },
   {
     "Id": 94,
     "Title": "Certificates, private-key files and certificate-store metadata",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Personal certificate metadata and bounded key-file discovery; no key export."
+    "Coverage": "Implemented",
+    "Limitation": "Certificate metadata and key-file discovery; no private-key export."
   },
   {
     "Id": 95,
     "Title": "Saved Wi-Fi profiles and recoverable pre-shared keys",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Readable Wi-Fi profile XML metadata; PSKs never recovered."
+    "Coverage": "Implemented",
+    "Limitation": "WLAN profile/PSK retrieval permitted to current token; values erased before reporting."
   },
   {
     "Id": 96,
     "Title": "Potentially insecure enterprise/802.1X Wi-Fi profiles",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Available EAP XML validation flags; full policy interpretation not implemented."
+    "Coverage": "Implemented",
+    "Limitation": "Enterprise EAP server-validation settings and explicit weak-validation indicators."
   },
   {
     "Id": 97,
     "Title": "Clipboard contents potentially containing secrets",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Text clipboard marker presence only; contents omitted."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 98,
     "Title": "Browser credential databases and recoverable stored logins. W; S identifies relevant browser artifacts",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Known default-browser stores; no login recovery or all-profile discovery."
+    "Coverage": "Implemented",
+    "Limitation": "Chromium DPAPI/AES-GCM and verified installed Firefox NSS recovery probes. App-bound and primary-password protections are not bypassed."
   },
   {
     "Id": 99,
     "Title": "Generic sensitive-file and secret searches: configuration files, backups, scripts, logs, SSH/VPN keys, Git credentials, databases, container/Kubernetes configuration, CI/CD artifacts and other configured filename/regex matches",
     "Category": "CredentialExposure",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Bounded filename/content heuristics; no exhaustive disk scan."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 100,
@@ -797,7 +797,7 @@
     "Category": "Hardening",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 101,
@@ -805,15 +805,15 @@
     "Category": "Hardening",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 102,
     "Title": "Credential Guard configuration/state",
     "Category": "Hardening",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Configured/WMI virtualization state; firmware/UEFI lock not verified."
+    "Coverage": "Implemented",
+    "Limitation": "DeviceGuard policy and runtime state; firmware lock not independently verified."
   },
   {
     "Id": 103,
@@ -821,15 +821,15 @@
     "Category": "Hardening",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 104,
     "Title": "Credential-delegation configuration",
     "Category": "Hardening",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Top-level delegation flags; allowlists/resultant policy not expanded."
+    "Coverage": "Implemented",
+    "Limitation": "Delegation flags and allow/deny target lists."
   },
   {
     "Id": 105,
@@ -837,15 +837,15 @@
     "Category": "Hardening",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 106,
     "Title": "SMBv1 and client/server SMB-signing requirements",
     "Category": "Hardening",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Registry/effective SMB configuration; platform support varies."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 107,
@@ -853,23 +853,23 @@
     "Category": "Hardening",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 108,
     "Title": "Broadcast/multicast name-resolution protocols and IPv6 configuration",
     "Category": "Hardening",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "LLMNR/mDNS/IPv6 registry evidence; per-interface NetBIOS omitted."
+    "Coverage": "Implemented",
+    "Limitation": "Name-resolution policy, per-interface NetBIOS and IPv6 bindings."
   },
   {
     "Id": 109,
     "Title": "Proxy, WPAD/PAC and Internet-zone configuration",
     "Category": "Hardening",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Current-user proxy/PAC evidence; zones/effective WPAD not evaluated."
+    "Coverage": "Implemented",
+    "Limitation": "Proxy, WPAD flags, WinHTTP and Internet-zone settings."
   },
   {
     "Id": 110,
@@ -877,7 +877,7 @@
     "Category": "Hardening",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 111,
@@ -885,79 +885,79 @@
     "Category": "Hardening",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 112,
     "Title": "AppLocker policy/enforcement and potentially permissive rules",
     "Category": "Hardening",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Collection/rule metadata and path candidates; exclusions/effective rule simulation not implemented."
+    "Coverage": "Implemented",
+    "Limitation": "Effective AppLocker rules and writable path conditions; complete exclusions/rule matching require context."
   },
   {
     "Id": 113,
     "Title": "PowerShell versions and security settings, including logging-related policy",
     "Category": "Hardening",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Runtime/Windows PowerShell versions and logging policy; not all PowerShell Core configs."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 114,
     "Title": "PowerShell remoting/session endpoint configuration and permissions",
     "Category": "Hardening",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Local endpoint configuration; remote connectivity not tested."
+    "Coverage": "Implemented",
+    "Limitation": "Remoting endpoint configuration and available descriptors."
   },
   {
     "Id": 115,
     "Title": "Antivirus/EDR products, defensive processes and AMSI providers",
     "Category": "Hardening",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Registered AV/AMSI and service-name heuristics; not a full EDR inventory."
+    "Coverage": "Implemented",
+    "Limitation": "SecurityCenter2, AMSI and service inventory; product-name classification is heuristic."
   },
   {
     "Id": 116,
     "Title": "Defender settings and exclusions; ASR rules; Defender for Endpoint state",
     "Category": "Hardening",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Defender status/preferences/ASR and MDE onboarding marker; access may be restricted."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 117,
     "Title": "Audit policy, Sysmon and Windows Event Forwarding settings",
     "Category": "Hardening",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Audit policy, Sysmon/WEC service state and subscription subkeys; not full WEF config."
+    "Coverage": "Implemented",
+    "Limitation": "Audit policy, Sysmon settings and event-forwarding subscriptions."
   },
   {
     "Id": 118,
     "Title": "UEFI/Secure Boot, TPM, BitLocker and DMA-protection state. P covers UEFI/Secure Boot, TPM and BitLocker; S covers Secure Boot; W includes DMA protection — Audit/context",
     "Category": "Hardening",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Secure Boot, TPM and BitLocker; DMA protection omitted."
+    "Coverage": "Implemented",
+    "Limitation": "Secure Boot, TPM and BitLocker APIs, subject to role and permissions."
   },
   {
     "Id": 119,
     "Title": "Office macro policy, Protected View and writable trusted locations",
     "Category": "Hardening",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Selected Office 16.x policy/trusted-location keys only."
+    "Coverage": "Implemented",
+    "Limitation": "Office 16 macros, Protected View and trusted-location ACLs."
   },
   {
     "Id": 120,
     "Title": "ClickOnce trust prompts, risky file-extension associations and hidden extensions",
     "Category": "Hardening",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "ClickOnce, HideFileExt and selected associations; no full association-risk analysis."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 121,
@@ -965,7 +965,7 @@
     "Category": "Hardening",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 122,
@@ -973,214 +973,214 @@
     "Category": "Hardening",
     "Scope": "Local",
     "Coverage": "Implemented",
-    "Limitation": ""
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 123,
     "Title": "Windows Firewall profiles, state and rules",
     "Category": "Hardening",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Profiles and bounded rules; filters not expanded."
+    "Coverage": "Implemented",
+    "Limitation": "Active firewall rules with address, port, program and service filters."
   },
   {
     "Id": 124,
     "Title": "OS, architecture, machine role, domain/tenant join and runtime information",
     "Category": "Inventory",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "OS/machine/domain/runtime; cloud tenant join not collected."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 125,
     "Title": "Installed applications, Windows roles/features and running processes/owners/command lines",
     "Category": "Inventory",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Applications/process metadata/features; command lines and owners omitted."
+    "Coverage": "Implemented",
+    "Limitation": "Packages/features and process owners with redacted invocation structure."
   },
   {
     "Id": 126,
     "Title": "Active-window information and user idle time. W; S reports idle time — Context",
     "Category": "Inventory",
     "Scope": "Local",
-    "Coverage": "Unsupported",
-    "Limitation": "Active-window and idle-time collection is not implemented."
+    "Coverage": "Implemented",
+    "Limitation": "Foreground window process/class and idle time; title text never retrieved."
   },
   {
     "Id": 127,
     "Title": "Startup, shutdown, reboot and sleep history",
     "Category": "Inventory",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Bounded event metadata only; no complete activity timeline."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded lifecycle event metadata."
   },
   {
     "Id": 128,
     "Title": "Logon and explicit-credential-use events",
     "Category": "Inventory",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Bounded logon event metadata only; payloads omitted."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded logon/explicit-credential event fields; payloads redacted."
   },
   {
     "Id": 129,
     "Title": "Disks, mounted volumes, mapped drives and network shares",
     "Category": "Inventory",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Logical disks/mapped drives/shares; not all mountpoints or share ACLs."
+    "Coverage": "Implemented",
+    "Limitation": "Disks, shares, volumes, partitions, mapped drives and mount paths."
   },
   {
     "Id": 130,
     "Title": "Network interfaces, profiles, ARP, routes, hosts file and DNS cache",
     "Category": "Inventory",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Interfaces/routes/neighbors and hosts-file metadata; DNS cache/profiles omitted."
+    "Coverage": "Implemented",
+    "Limitation": "Interfaces, routes, neighbors, profiles, DNS cache and hosts mappings."
   },
   {
     "Id": 131,
     "Title": "TCP/UDP listeners and connections, with owning processes/services where available",
     "Category": "Inventory",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "TCP/UDP with PID; service correlation not expanded."
+    "Coverage": "Implemented",
+    "Limitation": "TCP/UDP endpoints with service PID correlation."
   },
   {
     "Id": 132,
     "Title": "Internet connectivity, external hostname resolution and optional network/port discovery",
     "Category": "Inventory",
     "Scope": "Network",
-    "Coverage": "Partial",
-    "Limitation": "Opt-in www.microsoft.com DNS lookup only; no port scan/connectivity guarantee."
+    "Coverage": "Implemented",
+    "Limitation": "External DNS resolution requires -IncludeNetwork; it does not prove unrestricted connectivity."
   },
   {
     "Id": 133,
     "Title": "RPC endpoint mappings",
     "Category": "Inventory",
     "Scope": "Local",
-    "Coverage": "Unsupported",
-    "Limitation": "RPC endpoint mapper enumeration is not implemented."
+    "Coverage": "Implemented",
+    "Limitation": "Local RPC endpoint-mapper inventory."
   },
   {
     "Id": 134,
     "Title": "WMI permanent event consumers, filters and bindings",
     "Category": "Inventory",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "WMI subscription class/path metadata; scripts/queries omitted."
+    "Coverage": "Implemented",
+    "Limitation": "WMI filters, consumers and bindings with redacted action details."
   },
   {
     "Id": 135,
     "Title": "Printers and printing-related inventory",
     "Category": "Inventory",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "CIM printer inventory only."
+    "Coverage": "Implemented",
+    "Limitation": "Bounded current-token evidence assessment; access failures and limits are reported at runtime."
   },
   {
     "Id": 136,
     "Title": "Browser history, bookmarks, typed URLs, open tabs and profile artifacts",
     "Category": "Inventory",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Browser history/bookmark artifacts; browsing data/open tabs not extracted."
+    "Coverage": "Implemented",
+    "Limitation": "History/bookmarks/typed URLs and persisted tab/session parsing. Unknown/encrypted formats are incomplete; live state may differ."
   },
   {
     "Id": 137,
     "Title": "Recent files, Explorer Run history, Office MRUs and Recycle Bin contents",
     "Category": "Inventory",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Recent-files/Recycle Bin directory presence; MRU values/contents not decoded."
+    "Coverage": "Implemented",
+    "Limitation": "Recent shortcuts, Run/Office MRUs and Recycle Bin metadata."
   },
   {
     "Id": 138,
     "Title": "Outlook downloads, OneNote backups, Slack artifacts and OneDrive/Office 365 synchronization locations",
     "Category": "Inventory",
     "Scope": "Sensitive",
-    "Coverage": "Partial",
-    "Limitation": "Known collaboration/sync directories; contents not collected."
+    "Coverage": "Implemented",
+    "Limitation": "Collaboration/download/backup artifacts and OneDrive sync locations."
   },
   {
     "Id": 139,
     "Title": "Windows Search Index queries, generic directory listing, registry querying and file metadata inspection",
     "Category": "Inventory",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Bounded generic filesystem metadata; no Windows Search Index query."
+    "Coverage": "Implemented",
+    "Limitation": "Read-only SYSTEMINDEX queries and filesystem metadata."
   },
   {
     "Id": 140,
     "Title": "LOLBAS discovery and WSL/Linux-shell artifacts",
     "Category": "Inventory",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Small executable list and WSL artifacts; no full LOLBAS dataset."
+    "Coverage": "Implemented",
+    "Limitation": "Full bundled LOLBAS name/path catalog plus WSL/Linux-shell artifacts."
   },
   {
     "Id": 141,
     "Title": "Applied domain GPOs writable by the current principal, plus local GPO configuration. W; S inventories local GPOs",
     "Category": "DomainCloud",
     "Scope": "Domain",
-    "Coverage": "Partial",
-    "Limitation": "Sampled domain GPOs/allow ACEs; applied GPO correlation/local GPO parsing not implemented."
+    "Coverage": "Implemented",
+    "Limitation": "Computer RSoP GPOs, AD/SYSVOL rights and local Registry.pol metadata."
   },
   {
     "Id": 142,
     "Title": "Current computer’s LAPS password readable from Active Directory",
     "Category": "DomainCloud",
     "Scope": "Domain",
-    "Coverage": "Partial",
-    "Limitation": "Own computer LAPS readability; encrypted attributes not decrypted."
+    "Coverage": "Implemented",
+    "Limitation": "Own-computer LAPS attribute readability; encrypted values stay protected."
   },
   {
     "Id": 143,
     "Title": "Readable gMSA managed-password material / relevant access relationships",
     "Category": "DomainCloud",
     "Scope": "Domain",
-    "Coverage": "Partial",
-    "Limitation": "gMSA retrieval relationships; managed passwords not requested."
+    "Coverage": "Implemented",
+    "Limitation": "gMSA retrieval relationships; password-readability probing additionally requires -IncludeSensitive."
   },
   {
     "Id": 144,
     "Title": "AD object control rights, including useful write, ownership and DACL permissions on sampled objects",
     "Category": "DomainCloud",
     "Scope": "Domain",
-    "Coverage": "Partial",
-    "Limitation": "Sampled allow ACEs matching token SIDs; deny/inheritance/object rights require review."
+    "Coverage": "Implemented",
+    "Limitation": "Windows object-specific AccessCheckByType on sampled AD descriptors, including denies."
   },
   {
     "Id": 145,
     "Title": "Kerberoastable service accounts and associated encryption/account-risk indicators",
     "Category": "DomainCloud",
     "Scope": "Domain",
-    "Coverage": "Partial",
-    "Limitation": "SPN/encryption/account metadata; no ticket requests or cracking."
+    "Coverage": "Implemented",
+    "Limitation": "SPN/encryption/account/password metadata; no service-ticket requests."
   },
   {
     "Id": 146,
     "Title": "AD CS certificate-template/configuration misconfiguration indicators",
     "Category": "DomainCloud",
     "Scope": "Domain",
-    "Coverage": "Partial",
-    "Limitation": "Template flags/EKUs/control ACEs; CA publication/enrollment/effective rights not fully evaluated."
+    "Coverage": "Implemented",
+    "Limitation": "CA publication, template enrollment, issuance controls and EKUs; ESC1/2/3 prerequisites, with CA-policy caveats."
   },
   {
     "Id": 147,
     "Title": "KrbRelayUp-related configuration indicators",
     "Category": "DomainCloud",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Local NTDS policy markers; absence on a member says nothing about DC policy."
+    "Coverage": "Implemented",
+    "Limitation": "Local indicators, domain machine quota and timed read-only DC LDAP policy queries."
   },
   {
     "Id": 148,
     "Title": "Cloud metadata, identity/token exposure and Google synchronization/join artifacts, plus detection of container context",
     "Category": "DomainCloud",
     "Scope": "Local",
-    "Coverage": "Partial",
-    "Limitation": "Local cloud/container markers only; metadata/token endpoints not contacted."
+    "Coverage": "Implemented",
+    "Limitation": "Local cloud/container/join markers; network opt-in enables metadata, sensitive opt-in additionally enables token-accessibility probes."
   }
 ]

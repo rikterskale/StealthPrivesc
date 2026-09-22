@@ -29,7 +29,9 @@ function Invoke-StealthPrivesc {
         [ValidateRange(10,100000)][int]$MaxItems = 500,
         [ValidateRange(1024,10485760)][int]$MaxFileBytes = 1048576,
         [ValidateRange(1,300)][int]$CommandTimeoutSeconds = 15,
-        [string[]]$SearchRoot, [string]$OutputDirectory, [switch]$PassThru
+        [string[]]$SearchRoot, [string]$OutputDirectory, [switch]$PassThru,
+        [string]$DriverDatabasePath=(Join-Path $script:ModuleRoot '../data/reference/drivers.json'),
+        [string]$VulnerabilityDatabasePath=(Join-Path $script:ModuleRoot '../data/reference/windows-updates.json')
     )
     $ErrorActionPreference = 'Stop'
     $catalog = @(Get-StealthPrivescCheck -CheckId $CheckId -Category $Category)
@@ -38,15 +40,22 @@ function Invoke-StealthPrivesc {
     if (-not ('StealthPrivesc.Native' -as [type])) {
         Add-Type -Path (Join-Path $script:ModuleRoot 'Native.cs') -ErrorAction Stop
     }
+    if (-not ('StealthPrivesc.NativeInspection' -as [type])) {
+        Add-Type -Path (Join-Path $script:ModuleRoot 'NativeInspection.cs') -ErrorAction Stop
+    }
+    if (-not ('StealthPrivesc.NativeObjects' -as [type])) {
+        Add-Type -Path (Join-Path $script:ModuleRoot 'NativeObjects.cs') -ErrorAction Stop
+    }
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
     $script:Context = @{
         MaxItems = $MaxItems; MaxFileBytes = $MaxFileBytes; CommandTimeoutSeconds = $CommandTimeoutSeconds
         IncludeNetwork = [bool]$IncludeNetwork; IncludeDomain = [bool]$IncludeDomain; IncludeSensitive = [bool]$IncludeSensitive
         SearchRoot = @($SearchRoot); Cache = @{}; Elevated = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        DriverDatabasePath=$DriverDatabasePath;VulnerabilityDatabasePath=$VulnerabilityDatabasePath
     }
     $report = [ordered]@{
-        SchemaVersion = '1.0'; ToolVersion = '0.1.0'; StartedUtc = [DateTime]::UtcNow.ToString('o')
+        SchemaVersion = '1.0'; ToolVersion = '0.2.0'; StartedUtc = [DateTime]::UtcNow.ToString('o')
         Computer = $env:COMPUTERNAME; User = $identity.Name; UserSid = $identity.User.Value
         Elevated = $script:Context.Elevated; ProcessArchitecture = $(if ([Environment]::Is64BitProcess) { 'x64' } else { 'x86' })
         Scope = [ordered]@{ Network = [bool]$IncludeNetwork; Domain = [bool]$IncludeDomain; Sensitive = [bool]$IncludeSensitive; MaxItems = $MaxItems; MaxFileBytes = $MaxFileBytes }

@@ -1,69 +1,85 @@
 # StealthPrivesc
 
-A read-only PowerShell Windows privilege-escalation exposure scanner. It collects token, permissions, configuration and inventory evidence, with credential values redacted. It does not exploit findings or change the assessed configuration.
+A PowerShell Windows privilege-escalation exposure scanner. Version 0.2 provides collectors for all 148 checklist IDs, with credential values redacted. Checks gather evidence without exploiting findings or changing assessed configuration.
 
-**Version 0.1 is an initial implementation, not full parity with the supplied checklist.** All 148 items have stable IDs: 24 have implemented checks, 118 have partial collectors, and 6 are explicitly unsupported. Several partial collectors are artifact or configuration inventory only. See [the exact coverage matrix](docs/COVERAGE.md) before relying on a result. CVE applicability, LOLDrivers matching, leaked-handle analysis and several deep credential/domain checks remain unfinished.
+See [coverage](docs/COVERAGE.md) for each collector's scope, including heuristic assessments and platform limits. Implemented does not mean every host, format or application is supported; runtime limits produce Partial results.
 
 ## Run
 
-Use 64-bit Windows PowerShell 5.1 or PowerShell 7 on Windows. No downloaded PowerShell modules are required for the local baseline. Some collectors depend on Windows components such as ScheduledTasks, Defender, DISM or AppLocker. Domain collectors require RSAT's ActiveDirectory module.
+Use 64-bit Windows PowerShell 5.1 or PowerShell 7. Windows 10/11 and current Windows Server are the primary targets. Windows components provide local APIs; AD checks require RSAT ActiveDirectory. Firefox recovery uses a verified installed Mozilla NSS runtime.
 
 ```powershell
-# List the catalog without inspecting the host.
-.\Invoke-StealthPrivesc.ps1 -ListChecks |
-    Format-Table Id, Category, Scope, Coverage, Title
+# Catalog only.
+.\Invoke-StealthPrivesc.ps1 -ListChecks
 
-# Local baseline; write timestamped JSON and standalone HTML reports.
+# Local baseline with JSON and standalone HTML reports.
 .\Invoke-StealthPrivesc.ps1 -OutputDirectory .\reports
 
-# Run a focused permissions assessment as your current user.
-.\Invoke-StealthPrivesc.ps1 -Category Identity,Services,TasksStartup,AccessControl `
+# Focused service/task/patch/driver checks.
+.\Invoke-StealthPrivesc.ps1 -CheckId 12,13,16,17,19,23,24,54,55,59,60 `
     -MaxItems 500 -OutputDirectory .\reports
 
-# Select individual checks; preserve structured results in memory.
-$report = .\Invoke-StealthPrivesc.ps1 -CheckId 1,4,12,13,17,47,100 -PassThru
-$report.Checks | Select-Object Id, Status, Findings
+# Credential exposure indicators, always redacted.
+.\Invoke-StealthPrivesc.ps1 -CheckId 72,73,74,81,95,98 -IncludeSensitive `
+    -OutputDirectory .\reports
 
-# Opt in to sensitive artifact inspection. Values remain redacted.
-.\Invoke-StealthPrivesc.ps1 -CheckId 68,78,99 -IncludeSensitive `
-    -SearchRoot C:\AuditFixtures -OutputDirectory .\reports
-
-# Explicit domain queries; RSAT and a reachable joined domain required.
-.\Invoke-StealthPrivesc.ps1 -CheckId 141,143,144,145,146 -IncludeDomain `
+# Bounded AD checks.
+.\Invoke-StealthPrivesc.ps1 -CheckId 141,143,144,145,146,147 -IncludeDomain `
     -MaxItems 100 -OutputDirectory .\reports
+
+$report = .\Invoke-StealthPrivesc.ps1 -CheckId 1,4,12,47,100 -PassThru
+$report.Checks | Select-Object Id,Status,Findings,Limitations
 ```
 
-If local script policy blocks execution, use your organization's approved script-signing/execution process. Start with a standard user token: an elevated administrator's write rights are generally expected. The scanner never requests elevation or enables token privileges.
+Use the identity whose access you want to assess. An elevated administrator's control rights are generally expected. The scanner never requests elevation, enables privileges, starts services, triggers tasks, changes policies, repairs MSI packages or sends exploitation payloads. Follow your organization's approved signing/execution process if script policy blocks execution.
 
-`-IncludeSensitive` enables checks 67–99 except the separate SYSVOL domain check, plus browser/activity artifact checks 136–138. `-IncludeDomain` enables SYSVOL and AD queries, including the optional own-computer LAPS readability check. `-IncludeNetwork` enables check 132's external DNS lookup. Either network/domain opt-in also permits UNC filesystem targets. Windows APIs can perform implicit name/principal resolution; these flags are not a network isolation mechanism.
+## Opt-ins and limits
 
-`-SearchRoot` scopes generic file checks; it does not replace fixed locations used by service, task, registry and product-specific checks. Defaults are ProgramData and the current user's Documents folder. Reparse-point traversal is skipped. `-MaxItems` bounds each collector/enumeration or result set, not the whole assessment. `-MaxFileBytes` defaults to 1 MiB for text inspection. `-CommandTimeoutSeconds` applies to external command helpers only, not every CIM/COM/LDAP call. The first version has no universal per-check timeout.
+* `-IncludeSensitive` enables credential and browser/activity checks. Windows/WinRT/browser/IIS/WLAN APIs may return credentials internally; reports retain exposure indicators only. Native buffers are cleared where possible. App-bound browser encryption and Firefox primary passwords are not bypassed. The SSPI probe preserves the original challenge/security flags and exports no authentication tokens.
+* `-IncludeDomain` enables SYSVOL/AD and DC policy queries. Actual gMSA password-readability probing additionally requires `-IncludeSensitive`.
+* `-IncludeNetwork` enables external DNS, NVD package advisory queries and link-local cloud metadata probes. NVD receives package names/versions, capped at ten queries per run. Cloud token/credential accessibility additionally requires `-IncludeSensitive`; returned tokens are never used against other services. Metadata probes disable proxies/redirects; AWS uses a short-lived IMDSv2 session.
+* Either network/domain opt-in permits UNC targets. Windows APIs can perform implicit name/principal resolution; the flags are not a network sandbox.
+* `-SearchRoot` scopes generic file searches; fixed product/service/task paths are also inspected. Reparse points are skipped.
+* `-MaxItems` bounds findings and individual enumerations, not total work. `-MaxFileBytes` bounds inspected content and decompression. External/native helper processes use `-CommandTimeoutSeconds`. Pipe/device loops also have a cooperative 60-second budget. CIM/COM/LDAP calls do not all have universal timeouts.
 
-## Interpret results
+Pipe checks connect only for metadata, using identification-level security. Device/handle checks query and close handles without writing through them. Windows may log these operations. Reports still contain paths, SIDs, usernames and hostnames.
 
-Coverage describes the implementation. Status describes this particular run:
+## Offline references
+
+Dated MSRC fixed-build, LOLDrivers hash/signature and LOLBAS name/path snapshots are bundled. Scans do not refresh them automatically. Missing, invalid or older-than-30-day references produce Partial results. No driver binaries or LOLBAS command payloads are included.
+
+```powershell
+# Updater requires PowerShell 7 and explicitly accesses public sources.
+pwsh .\tools\Update-ReferenceData.ps1 -Drivers -Lolbas
+pwsh .\tools\Update-ReferenceData.ps1 -WindowsUpdates `
+    -Month 2019-Apr,2019-May,2019-Jun,2019-Jul,2019-Aug,2019-Sep,2019-Oct,2019-Nov,2019-Dec,2020-Feb,2020-Mar,2020-Apr,2020-May,2020-Jun,2020-Jul,2020-Aug,2020-Sep,2025-Nov,2026-Jul,2026-Aug,2026-Sep
+```
+
+The Windows updater replaces the snapshot with the requested months. Include historical months to retain the Watson/Recall records. `-DriverDatabasePath` and `-VulnerabilityDatabasePath` accept compatible local snapshots. Patch assessment matches exact product branch, architecture, role and revision; it does not replace Microsoft's full applicability engine.
+
+CI assessment distinguishes kernel-mode deny rules from user-mode rules and correlates runtime policy enforcement where accessible. Missing deny matches do **not** prove that Windows would load a driver. Conditional signer rules and incomplete metadata remain explicit.
+
+## Results
 
 | Status | Meaning |
 |---|---|
-| Completed | The implemented collector completed within its declared scope. This does not mean the computer is secure. |
-| Partial | A partial collector ran, access was limited, or results were truncated. Read `Limitations`. |
-| Skipped | A required opt-in, dependency or applicable environment was absent. |
-| Unsupported | No collector is implemented for this checklist item. |
-| Error | The collector failed. Already gathered evidence is retained. |
+| Completed | Collector completed within declared scope, not a security verdict. |
+| Partial | Access, data, format, dependency or enumeration limits affected assessment. |
+| Skipped | Required opt-in or applicable environment is absent. |
+| Error | Collector failed; earlier evidence remains. |
+| Unsupported | Reserved for unimplemented catalog entries; none remain in 0.2. |
 
-Findings carry `Severity`, `Target`, `Observation`, structured `Evidence` and, where appropriate, `Remediation`. Information entries are context, not vulnerabilities. File/registry ACL checks use Windows `AccessCheck` with the current effective token, including deny and restricted-token handling. They do not fully evaluate mandatory integrity policy, filesystem locks, loader behavior or execution triggers. Directory write/append/delete permissions are candidates, not proof that a particular privileged executable can be replaced. AD ACE checks are explicitly heuristic and do not claim effective access.
+File/registry/object checks use Windows access evaluation. AD checks use object-specific AccessCheckByType. These observations do not establish execution reachability or override mandatory integrity, locks or custom loaders. NVD keyword results, SOAP markers, historical ghost-DLL rules and AD CS prerequisite combinations are candidates requiring contextual validation.
 
-Credential checks report marker categories, value presence and artifact locations. They do not print matched values, export tickets/keys, decrypt stores, request service tickets, or read process memory. Raw process/task/service command arguments and event payloads are omitted. Reports still contain operational metadata (usernames, SIDs, paths, hostnames), so handle them as assessment records.
-
-## Develop and test
+## Validate
 
 ```powershell
-.\tests\Test-StealthPrivesc.ps1
+pwsh -NoProfile -File .\tests\Test-StealthPrivesc.ps1
+pwsh -NoProfile -File .\tests\Test-ExtendedChecks.ps1
 powershell.exe -NoProfile -File .\tests\Test-StealthPrivesc.ps1
+powershell.exe -NoProfile -File .\tests\Test-ExtendedChecks.ps1
 ```
 
-The dependency-free test suite exercises catalog validation, executable parsing, redaction, deny-ACE evaluation, bounded traversal, cached failure propagation, report encoding and the CLI opt-ins. Native tests require Windows. Host-wide privileged collectors and AD behavior need a representative lab; tests running in a restricted token cannot validate all of those paths.
+Tests cover synthetic DPAPI/AES-GCM secrets, deny/object-specific ACLs, exact patch/hash matching, kernel-vs-user CI rules, read-only SQLite, decompression bounds, redaction, CLI gating and report encoding. DPAPI fixtures require a loaded user profile and fail under some sandbox tokens. Live sensitive stores, every product and every AD/AD CS topology have not been validated in a representative lab.
 
-Collectors live in `src/Checks`; shared helpers and reporting are in `src/Private`; query-only Win32 interop is in `src/Native.cs`. The module exports `Invoke-StealthPrivesc` and `Get-StealthPrivescCheck`. Keep catalog coverage and limitations honest when adding a collector. Do not turn unavailable data into a completed empty check.
-
-See [design notes](docs/DESIGN.md), [coverage](docs/COVERAGE.md) and [reference sources](docs/REFERENCES.md).
+See [design](docs/DESIGN.md), [coverage](docs/COVERAGE.md), [sources](docs/REFERENCES.md) and [third-party notices](docs/THIRD-PARTY.md).

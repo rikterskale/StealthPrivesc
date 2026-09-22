@@ -18,13 +18,22 @@ function Invoke-IdentityCheck {
         5 {
             $i=[Security.Principal.WindowsIdentity]::GetCurrent()
             try { $sids=@($i.User.Value)+@([StealthPrivesc.Native]::Sids(2)|ForEach-Object Sid)
-                foreach($sid in $sids){foreach($right in [StealthPrivesc.Native]::AccountRights($sid)){ Add-Evidence $sid 'Effective local LSA account-right assignment; a new logon may be needed.' @{Right=$right} }}
+                foreach($sid in $sids){
+                    try {
+                        foreach($right in [StealthPrivesc.Native]::AccountRights($sid)){ Add-Evidence $sid 'Local LSA account-right assignment; a new logon may be needed.' @{Right=$right} }
+                    } catch {
+                        $cause=$_.Exception.GetBaseException()
+                        if($cause -is [ComponentModel.Win32Exception] -and $cause.NativeErrorCode -in @(5,1314)){
+                            Set-CheckPartial 'LSA account-right enumeration requires access unavailable to the current token.'
+                        } else { throw }
+                    }
+                }
             } finally{$i.Dispose()}
         }
         6 {
-            foreach($u in Get-Limited @(Get-LocalUser -ErrorAction Stop)){ Add-Evidence $u.Name 'Local account.' ($u | Select-Object Name,Enabled,SID,PasswordLastSet,LastLogon,PasswordExpires,UserMayChangePassword) }
+            foreach($u in Get-Limited @(Get-LocalUser -ErrorAction Stop)){ Add-Evidence $u.Name 'Local account.' ($u | Select-Object Name,Enabled,@{n='SID';e={[string]$_.SID}},PasswordLastSet,LastLogon,PasswordExpires,UserMayChangePassword) }
             foreach($g in Get-Limited @(Get-LocalGroup -ErrorAction Stop)){
-                try { $members=@(Get-LocalGroupMember -Group $g -ErrorAction Stop | Select-Object Name,SID,ObjectClass,PrincipalSource); Add-Evidence $g.Name 'Local group membership.' @{SID=$g.SID.Value;Members=$members} }
+                try { $members=@(Get-LocalGroupMember -Group $g -ErrorAction Stop | Select-Object Name,@{n='SID';e={[string]$_.SID}},ObjectClass,PrincipalSource); Add-Evidence $g.Name 'Local group membership.' @{SID=$g.SID.Value;Members=$members} }
                 catch {Set-CheckPartial "Cannot resolve members of group: $($g.Name)"}
             }
         }
@@ -32,6 +41,7 @@ function Invoke-IdentityCheck {
         8 {
             foreach($s in Get-Limited @(Get-CimInstance Win32_LogonSession -ErrorAction Stop | Where-Object LogonType -in @(2,7,10,11))){ Add-Evidence ([string]$s.LogonId) 'Interactive, unlock, remote-interactive or cached logon session.' ($s | Select-Object LogonId,LogonType,StartTime,AuthenticationPackage) }
             foreach($u in Get-Limited @(Get-CimInstance Win32_LoggedOnUser -ErrorAction Stop)){ Add-Evidence ([string]$u.Antecedent) 'User-to-logon-session association.' @{Session=[string]$u.Dependent} }
+            foreach($profile in Get-Limited @(Get-CimInstance Win32_UserProfile -ErrorAction Stop)){Add-Evidence $profile.SID 'Current or previously used local profile.' ($profile|Select-Object SID,LocalPath,Loaded,LastUseTime)}
         }
         9 {
             foreach($p in Get-Limited @(Get-CimInstance Win32_UserProfile -ErrorAction Stop)){
@@ -41,6 +51,6 @@ function Invoke-IdentityCheck {
                 catch{ Set-CheckPartial "Profile listing unavailable: $($p.LocalPath)" }
             }
         }
-        10 { foreach($scope in @('Process','User','Machine')){ foreach($pair in [Environment]::GetEnvironmentVariables($scope).GetEnumerator()){if($pair.Key-match'(?i)pass|secret|token|credential|api.?key|connection.?string'){ Add-Evidence "$scope/$($pair.Key)" 'Sensitive environment-variable name; value redacted.' @{Value='[REDACTED]';NonEmpty=(-not[string]::IsNullOrEmpty($pair.Value))} 'Low' }}} }
+        10 { foreach($scope in @('Process','User','Machine')){ foreach($pair in [Environment]::GetEnvironmentVariables($scope).GetEnumerator()){$nameMatch=$pair.Key-match'(?i)pass|secret|token|credential|api.?key|connection.?string';$contentMatch=[string]$pair.Value-match'(?i)(password|passwd|pwd|token|secret|api[_-]?key)\s*[:=]|://[^/@\s:]+:[^/@\s]+@|-----BEGIN .*PRIVATE KEY-----';if($nameMatch-or$contentMatch){ Add-Evidence "$scope/$($pair.Key)" 'Potential credential-bearing environment variable; value redacted.' @{Value='[REDACTED]';NameMarker=$nameMatch;ContentMarker=$contentMatch;NonEmpty=(-not[string]::IsNullOrEmpty($pair.Value))} 'Low' }}} }
     }
 }

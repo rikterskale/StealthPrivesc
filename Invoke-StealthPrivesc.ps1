@@ -11,6 +11,8 @@ param(
     [ValidateRange(1024,10485760)][int]$MaxFileBytes = 1048576,
     [ValidateRange(1,300)][int]$CommandTimeoutSeconds = 15,
     [string[]]$SearchRoot,
+    [string]$DriverDatabasePath,
+    [string]$VulnerabilityDatabasePath,
     [string]$OutputDirectory,
     [switch]$PassThru
 )

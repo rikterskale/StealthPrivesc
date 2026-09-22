@@ -1,0 +1,1 @@
+Query-only binary policy parser from https://github.com/itm4n/PrivescCheck at 010134b973de1cd0d9226730a03509ce1ca52ac2. See LICENSE.

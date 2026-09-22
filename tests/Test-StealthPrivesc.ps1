@@ -134,7 +134,7 @@ $module=Get-Module StealthPrivesc
             Assert-True ($access.Error-eq0-and-not$access.Allowed) 'AccessCheck must honor deny ACEs before allow ACEs.'
             $smoke=Invoke-StealthPrivesc -CheckId 1,3,43,47,67,70,100,132 -MaxItems 10 -PassThru
             Assert-True (($smoke.Checks|Where-Object Id -eq 1).Status-eq'Completed') 'Native identity smoke test must complete.'
-            Assert-True (($smoke.Checks|Where-Object Id -eq 43).Status-eq'Unsupported') 'Unsupported must never become completed.'
+            Assert-True (($smoke.Checks|Where-Object Id -eq 43).Status-in@('Completed','Partial')) 'Handle collector must run and disclose incomplete visibility.'
             Assert-True (($smoke.Checks|Where-Object Id -eq 67).Status-eq'Skipped') 'Sensitive checks require opt-in.'
             Assert-True (($smoke.Checks|Where-Object Id -eq 70).Status-eq'Skipped') 'Domain checks require opt-in.'
             Assert-True (($smoke.Checks|Where-Object Id -eq 132).Status-eq'Skipped') 'External network checks require opt-in.'
