@@ -62,6 +62,203 @@ $report.Checks | Select-Object Id,Status,Findings,Limitations
 | `SystemRisk` | 20 | System risk, patch, installer, driver, and vulnerability checks |
 | `TasksStartup` | 7 | Scheduled tasks and startup locations |
 
+#### Check IDs by category
+
+This catalog shows every check ID and its full title, grouped by the exact `-Category` value accepted by the script.
+
+##### AccessControl
+
+| Check ID | Check |
+| ---: | --- |
+| 29 | Writable directories in executable/DLL search paths, particularly system PATH |
+| 30 | Process DLL-hijacking candidates, including relevant writable process locations |
+| 31 | Known services susceptible to missing/“ghost” DLL hijacking, correlated with writable search paths |
+| 32 | Writable installed-application files and directories, including third-party applications |
+| 33 | Writable application directories under ProgramData |
+| 34 | Writable directories at fixed-drive roots and their contents |
+| 35 | Writable executable files in nonstandard locations |
+| 36 | Writable COM server registration keys |
+| 37 | Writable COM server DLL/EXE files |
+| 38 | COM registrations referencing missing modules through relative paths, creating potential ghost-DLL search opportunities |
+| 39 | Stale COM registrations referencing nonexistent files |
+| 40 | Writable machine registry keys: known exposed HKLM descendants and a bounded heuristic search |
+| 41 | Cross-user TypingInsights registry-key permissions |
+| 42 | Excessive permissions on another user’s processes or threads |
+| 43 | Accessible leaked handles to privileged processes, threads or files |
+| 44 | Named-pipe ACLs and writable pipes, including correlation with privileged pipe servers where implemented |
+| 45 | Writable named kernel-device objects |
+| 46 | Potentially unsafe .NET SOAP client proxy configurations—SOAPwn-related surfaces |
+
+##### CredentialExposure
+
+| Check ID | Check |
+| ---: | --- |
+| 67 | Winlogon/automatic-logon credentials in the registry |
+| 68 | Unattended-installation and Sysprep answer files containing credentials |
+| 69 | Cached Group Policy Preferences passwords / cpassword material |
+| 70 | Domain/SYSVOL Group Policy Preferences password searches |
+| 71 | Readable SAM, SYSTEM and SECURITY hive files, including backups or shadow-copy exposure where implemented |
+| 72 | Windows Credential Manager entries and accessible saved credentials |
+| 73 | Windows Vault web/Windows credentials |
+| 74 | UWP PasswordVault / Credential Locker entries |
+| 75 | DPAPI master-key files and credential blobs |
+| 76 | Credentials exposed through Windows security packages |
+| 77 | Kerberos ticket-cache and TGT information |
+| 78 | PowerShell history and transcript files containing secrets |
+| 79 | Secrets in event logs: PowerShell script blocks, process-creation command lines and Sysmon events |
+| 80 | Registry values containing possible passwords or credential material, including application-specific locations and broader searches |
+| 81 | IIS/web application configuration credentials: web.config, connection strings and application-pool credentials, including decryption where supported. U; W searches relevant files and uses AppCmd |
+| 82 | McAfee SiteList.xml credentials and related configuration |
+| 83 | SCCM Network Access Account credential blobs |
+| 84 | SCCM cache contents and files containing possible embedded credentials. P; W also enumerates SCCM-related information |
+| 85 | Symantec Management Agent Account Connectivity Credentials |
+| 86 | SCOM Run As account traces indicating stored credentials |
+| 87 | VNC server passwords/configuration: RealVNC, TigerVNC, TightVNC and UltraVNC where supported. P; W searches VNC artifacts |
+| 88 | Saved RDP connections and RDCMan settings/credential files |
+| 89 | PuTTY, SuperPuTTY and MTPuTTY session/configuration artifacts, including referenced keys and saved connection information |
+| 90 | FileZilla and other FTP/SFTP-client configuration files |
+| 91 | KeePass databases, configuration and key-file clues |
+| 92 | Oracle SQL Developer connection/configuration files |
+| 93 | Cloud credential files and token caches: AWS, Azure, Google Cloud and Bluemix-related artifacts |
+| 94 | Certificates, private-key files and certificate-store metadata |
+| 95 | Saved Wi-Fi profiles and recoverable pre-shared keys |
+| 96 | Potentially insecure enterprise/802.1X Wi-Fi profiles |
+| 97 | Clipboard contents potentially containing secrets |
+| 98 | Browser credential databases and recoverable stored logins. W; S identifies relevant browser artifacts |
+| 99 | Generic sensitive-file and secret searches: configuration files, backups, scripts, logs, SSH/VPN keys, Git credentials, databases, container/Kubernetes configuration, CI/CD artifacts and other configured filename/regex matches |
+
+##### DomainCloud
+
+| Check ID | Check |
+| ---: | --- |
+| 141 | Applied domain GPOs writable by the current principal, plus local GPO configuration. W; S inventories local GPOs |
+| 142 | Current computer’s LAPS password readable from Active Directory |
+| 143 | Readable gMSA managed-password material / relevant access relationships |
+| 144 | AD object control rights, including useful write, ownership and DACL permissions on sampled objects |
+| 145 | Kerberoastable service accounts and associated encryption/account-risk indicators |
+| 146 | AD CS certificate-template/configuration misconfiguration indicators |
+| 147 | KrbRelayUp-related configuration indicators |
+| 148 | Cloud metadata, identity/token exposure and Google synchronization/join artifacts, plus detection of container context |
+
+##### Hardening
+
+| Check ID | Check |
+| ---: | --- |
+| 100 | UAC configuration: elevation policy, administrative token filtering and remote restrictions |
+| 101 | LSA protection / RunAsPPL configuration |
+| 102 | Credential Guard configuration/state |
+| 103 | WDigest settings and cached-domain-logon configuration. W; S exposes related LSA settings — Audit |
+| 104 | Credential-delegation configuration |
+| 105 | NTLM settings and NTLMv1/downgrade exposure |
+| 106 | SMBv1 and client/server SMB-signing requirements |
+| 107 | Hardened UNC path policies |
+| 108 | Broadcast/multicast name-resolution protocols and IPv6 configuration |
+| 109 | Proxy, WPAD/PAC and Internet-zone configuration |
+| 110 | LAPS installation and policy configuration, including legacy/Windows LAPS where supported |
+| 111 | Default local Administrator account enabled/disabled state |
+| 112 | AppLocker policy/enforcement and potentially permissive rules |
+| 113 | PowerShell versions and security settings, including logging-related policy |
+| 114 | PowerShell remoting/session endpoint configuration and permissions |
+| 115 | Antivirus/EDR products, defensive processes and AMSI providers |
+| 116 | Defender settings and exclusions; ASR rules; Defender for Endpoint state |
+| 117 | Audit policy, Sysmon and Windows Event Forwarding settings |
+| 118 | UEFI/Secure Boot, TPM, BitLocker and DMA-protection state. P covers UEFI/Secure Boot, TPM and BitLocker; S covers Secure Boot; W includes DMA protection — Audit/context |
+| 119 | Office macro policy, Protected View and writable trusted locations |
+| 120 | ClickOnce trust prompts, risky file-extension associations and hidden extensions |
+| 121 | Lock-screen network-selection policy associated with Airstrike exposure |
+| 122 | RDP client/server security settings |
+| 123 | Windows Firewall profiles, state and rules |
+
+##### Identity
+
+| Check ID | Check |
+| ---: | --- |
+| 1 | Current identity and token context: username, SID, domain, integrity/elevation, token type and related identity information |
+| 2 | Current token group memberships: local/domain groups, administrative membership, and relevant group attributes |
+| 3 | Restricted token SIDs |
+| 4 | Potentially dangerous token privileges: impersonation, debugging, backup/restore, ownership, driver loading, TCB and other privilege assignments; exact flagged sets differ |
+| 5 | Privileges assigned through local/domain policy, including rights potentially available after a new logon |
+| 6 | Local users and groups: administrators, account state, password timestamps and membership information |
+| 7 | Password and account-lockout policies |
+| 8 | Logged-on users and sessions: interactive/logon sessions, incoming RDP sessions and previously logged-on users, depending on tool |
+| 9 | Other users’ profile/home directories and their accessibility, including readable or writable locations |
+| 10 | Environment variables containing credentials, tokens or sensitive configuration |
+
+##### Inventory
+
+| Check ID | Check |
+| ---: | --- |
+| 124 | OS, architecture, machine role, domain/tenant join and runtime information |
+| 125 | Installed applications, Windows roles/features and running processes/owners/command lines |
+| 126 | Active-window information and user idle time. W; S reports idle time — Context |
+| 127 | Startup, shutdown, reboot and sleep history |
+| 128 | Logon and explicit-credential-use events |
+| 129 | Disks, mounted volumes, mapped drives and network shares |
+| 130 | Network interfaces, profiles, ARP, routes, hosts file and DNS cache |
+| 131 | TCP/UDP listeners and connections, with owning processes/services where available |
+| 132 | Internet connectivity, external hostname resolution and optional network/port discovery |
+| 133 | RPC endpoint mappings |
+| 134 | WMI permanent event consumers, filters and bindings |
+| 135 | Printers and printing-related inventory |
+| 136 | Browser history, bookmarks, typed URLs, open tabs and profile artifacts |
+| 137 | Recent files, Explorer Run history, Office MRUs and Recycle Bin contents |
+| 138 | Outlook downloads, OneNote backups, Slack artifacts and OneDrive/Office 365 synchronization locations |
+| 139 | Windows Search Index queries, generic directory listing, registry querying and file metadata inspection |
+| 140 | LOLBAS discovery and WSL/Linux-shell artifacts |
+
+##### Services
+
+| Check ID | Check |
+| ---: | --- |
+| 11 | Installed services: executable paths, accounts, start modes and third-party service identification |
+| 12 | Modifiable service objects: service configuration, ownership or DACL rights that permit controlling a service |
+| 13 | Modifiable Service Control Manager permissions |
+| 14 | Writable service registry keys and settings |
+| 15 | Writable extended service registry settings/subkeys |
+| 16 | Writable service executables, associated files or containing directories |
+| 17 | Unquoted service executable paths containing spaces, including writable interception locations where implemented |
+| 18 | Writable DLLs explicitly loaded by LocalSystem services |
+| 19 | Writable LocalSystem service recovery-command targets |
+| 20 | Service start/stop/restart permissions: supporting feasibility checks; PrivescCheck also has a dedicated experimental restart check |
+| 21 | Services using accounts whose passwords are stored locally as service secrets |
+
+##### SystemRisk
+
+| Check ID | Check |
+| ---: | --- |
+| 47 | AlwaysInstallElevated Windows Installer policy, including machine and user settings |
+| 48 | Windows Installer repair UAC-prompt suppression |
+| 49 | MSI repair allowlists and potentially unsafe custom actions in allowlisted packages |
+| 50 | Potentially unsafe custom actions in cached MSI packages |
+| 51 | Print Spooler and Point-and-Print configuration permitting unsafe printer-driver installation |
+| 52 | Driver co-installer policy |
+| 53 | WSUS configuration: update-server location, HTTP versus HTTPS and related policy |
+| 54 | Missing Windows patches / OS-version vulnerability matching |
+| 55 | Watson’s explicit CVE checks: CVE-2019-0836, -0841, -1064, -1130, -1253, -1315, -1385, -1388, -1405; CVE-2020-0668, -0683, -1013 |
+| 56 | Installed hotfixes, Microsoft updates and update history/recency |
+| 57 | BIOS update/release age |
+| 58 | Installed third-party kernel/device drivers |
+| 59 | Known vulnerable drivers matched against the LOLDrivers database |
+| 60 | Known vulnerable drivers not covered by local Code Integrity blocking policies |
+| 61 | Unsigned or legacy/weakly signed kernel drivers |
+| 62 | Risky OEM privileged utilities/components |
+| 63 | Installed-package vulnerability lookup |
+| 64 | CLFS logfile-authentication mitigation configuration |
+| 65 | Object Manager namespace access relevant to race-window amplification |
+| 66 | KernelQuick/ValleyRAT-related registry indicators |
+
+##### TasksStartup
+
+| Check ID | Check |
+| ---: | --- |
+| 22 | Scheduled-task inventory: actions, paths, execution accounts and other task details |
+| 23 | Writable scheduled-task executables, scripts or containing directories |
+| 24 | Low-privilege control over enabled SYSTEM scheduled tasks |
+| 25 | Unquoted scheduled-task action paths |
+| 26 | Scheduled tasks configured with password-based logon, indicating locally stored account secrets |
+| 27 | Microsoft Recall PolicyConfiguration task exposure, combining task configuration markers with OS/build information |
+| 28 | Startup/autorun entries and writable referenced programs or directories |
+
 Use `-ListChecks` to see each check's ID, title, scope, and coverage without running it. You can preview the exact category selection with `-ListChecks -Category Services,TasksStartup`. To pick individual checks, use `-CheckId 12,13,16`. If you supply both `-Category` and `-CheckId`, the script runs only IDs that belong to one of the selected categories. With neither selector, it runs all 148 checks.
 
 Category selection does not automatically enable scope opt-ins. Checks requiring domain, network, or sensitive access need `-IncludeDomain`, `-IncludeNetwork`, or `-IncludeSensitive`, respectively; otherwise they appear as skipped in the report. See [Opt-ins and limits](#opt-ins-and-limits) for what each switch permits. Script help is also available with `Get-Help .\\Invoke-StealthPrivesc.ps1 -Detailed`.
