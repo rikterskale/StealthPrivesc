@@ -25,6 +25,11 @@ Use 64-bit Windows PowerShell 5.1 or PowerShell 7 on a supported platform. Windo
 # Local baseline with JSON and standalone HTML reports.
 .\Invoke-StealthPrivesc.ps1 -OutputDirectory .\reports
 
+# Smaller bundles by catalog category. Combine categories as needed.
+.\Invoke-StealthPrivesc.ps1 -Category Identity -OutputDirectory .\reports
+.\Invoke-StealthPrivesc.ps1 -Category Services,TasksStartup -OutputDirectory .\reports
+.\Invoke-StealthPrivesc.ps1 -Category Hardening,SystemRisk -OutputDirectory .\reports
+
 # Focused service/task/patch/driver checks.
 .\Invoke-StealthPrivesc.ps1 -CheckId 12,13,16,17,19,23,24,54,55,59,60 `
     -MaxItems 500 -OutputDirectory .\reports
@@ -40,6 +45,26 @@ Use 64-bit Windows PowerShell 5.1 or PowerShell 7 on a supported platform. Windo
 $report = .\Invoke-StealthPrivesc.ps1 -CheckId 1,4,12,47,100 -PassThru
 $report.Checks | Select-Object Id,Status,Findings,Limitations
 ```
+
+### Choosing a smaller run
+
+`-Category` takes one or more of these exact names. Supplying multiple categories runs the checks from all of them:
+
+| Category | Checks | What it covers |
+| --- | ---: | --- |
+| `AccessControl` | 18 | Object and resource permissions, including services and files |
+| `CredentialExposure` | 33 | Credential, browser, and user activity exposure indicators |
+| `DomainCloud` | 8 | Domain and cloud configuration checks |
+| `Hardening` | 24 | Windows security and configuration policy |
+| `Identity` | 10 | Current identity, token, users, groups, and account policy |
+| `Inventory` | 17 | Host, software, network, and related inventory |
+| `Services` | 11 | Service configuration and permissions |
+| `SystemRisk` | 20 | System risk, patch, installer, driver, and vulnerability checks |
+| `TasksStartup` | 7 | Scheduled tasks and startup locations |
+
+Use `-ListChecks` to see each check's ID, title, scope, and coverage without running it. You can preview the exact category selection with `-ListChecks -Category Services,TasksStartup`. To pick individual checks, use `-CheckId 12,13,16`. If you supply both `-Category` and `-CheckId`, the script runs only IDs that belong to one of the selected categories. With neither selector, it runs all 148 checks.
+
+Category selection does not automatically enable scope opt-ins. Checks requiring domain, network, or sensitive access need `-IncludeDomain`, `-IncludeNetwork`, or `-IncludeSensitive`, respectively; otherwise they appear as skipped in the report. See [Opt-ins and limits](#opt-ins-and-limits) for what each switch permits. Script help is also available with `Get-Help .\\Invoke-StealthPrivesc.ps1 -Detailed`.
 
 Use the identity whose access you want to assess. An elevated administrator's control rights are generally expected. The scanner never requests elevation, enables privileges, starts services, triggers tasks, changes policies, repairs MSI packages or sends exploitation payloads. Follow your organization's approved signing/execution process if script policy blocks execution.
 

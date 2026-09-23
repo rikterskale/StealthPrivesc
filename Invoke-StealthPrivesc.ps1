@@ -1,4 +1,66 @@
 #requires -Version 5.1
+<#
+.SYNOPSIS
+Runs all checks or a selected subset of the StealthPrivesc assessment.
+
+.DESCRIPTION
+With no -CheckId or -Category selector, runs the full catalog. -Category accepts
+one or more catalog categories and runs their combined checks. -CheckId accepts
+one or more numeric IDs. When both are provided, a check must match both
+selectors. Use -ListChecks to list the checks selected by the same selectors.
+
+Some checks are gated by opt-in switches. Domain checks may need -IncludeDomain,
+network checks may need -IncludeNetwork, and sensitive checks may need
+-IncludeSensitive. Without the required switch, those checks are reported as
+skipped rather than silently omitted.
+
+.PARAMETER CheckId
+Run only the specified check IDs. See -ListChecks for IDs and descriptions.
+
+.PARAMETER Category
+Run checks from the specified catalog categories. Valid values are
+AccessControl, CredentialExposure, DomainCloud, Hardening, Identity, Inventory,
+Services, SystemRisk, and TasksStartup. Multiple values are combined.
+
+.PARAMETER ListChecks
+List matching checks without running them. Can be combined with -Category and
+-CheckId to inspect a proposed selection.
+
+.PARAMETER IncludeNetwork
+Enable checks that make network connections, including external metadata or
+advisory queries.
+
+.PARAMETER IncludeDomain
+Enable checks that query domain resources and directory services.
+
+.PARAMETER IncludeSensitive
+Enable checks that inspect credential or browser/activity exposure. Reported
+values remain redacted.
+
+.EXAMPLE
+.\Invoke-StealthPrivesc.ps1 -Category Identity
+Runs the 10 identity checks.
+
+.EXAMPLE
+.\Invoke-StealthPrivesc.ps1 -Category Services,TasksStartup
+Runs checks from both categories.
+
+.EXAMPLE
+.\Invoke-StealthPrivesc.ps1 -Category DomainCloud -IncludeDomain
+Runs domain/cloud checks and enables domain-scoped checks. Network-scoped checks
+still require -IncludeNetwork.
+
+.EXAMPLE
+.\Invoke-StealthPrivesc.ps1 -CheckId 12,13,16 -ListChecks
+Lists only checks 12, 13, and 16 without running them.
+
+.EXAMPLE
+.\Invoke-StealthPrivesc.ps1 -Category Services -CheckId 12,13,16
+Runs only the specified IDs that are also in the Services category.
+
+.LINK
+README.md
+#>
 [CmdletBinding()]
 param(
     [int[]]$CheckId,
