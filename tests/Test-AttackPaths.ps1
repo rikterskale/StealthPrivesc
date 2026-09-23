@@ -22,7 +22,7 @@ Import-Module (Join-Path $PSScriptRoot '../src/StealthPrivesc.psd1') -Force
             24=@((New-Finding '\ACME\NIGHTLY' @{Right='UpdateTask';Context=@{Account='SYSTEM';Enabled=$true}}))
         }
         [pscustomobject]@{
-            SchemaVersion='1.4';Notice='Synthetic demonstration; no host findings.';Computer='fixture';User='fixture\reader';UserSid='S-1-5-21-100-200-300-1001';Elevated=$false
+            SchemaVersion='1.5';Notice='Synthetic demonstration; no host findings.';Computer='fixture';User='fixture\reader';UserSid='S-1-5-21-100-200-300-1001';Elevated=$false
             StartedUtc='fixture';RunStatus='Completed';Summary=@{Completed=9;Partial=0;Error=0;Skipped=0;Unsupported=0}
             Checks=@(foreach ($id in $data.Keys | Sort-Object) { [pscustomobject]@{Id=$id;Title="Fixture $id";Category='Fixture';Coverage='Implemented';Status='Completed';Findings=$data[$id];Limitations=@();Verification=[pscustomobject]@{RerunCommand=".\Invoke-StealthPrivesc.ps1 -CheckId $id -PassThru";WorkingDirectory='C:\scanner'}} })
         }
@@ -107,6 +107,77 @@ Import-Module (Join-Path $PSScriptRoot '../src/StealthPrivesc.psd1') -Force
     Assert-Path ($html -notmatch '<script>' -and $html -match '&lt;script&gt;') 'Attack-path HTML escapes host-supplied object names.'
     Assert-Path (($result | ConvertTo-Json -Depth 12) -notmatch 'NEVER_COPY_SOURCE_SECRET') 'The engine copies explicit metadata, not arbitrary evidence values.'
 
+    # Every prerequisite must provide standalone, parseable validation commands.
+    $validationVariants=@((New-PathFixture),(New-PathFixture),(New-PathFixture))
+    $validationVariants[1].Elevated=$true
+    (Get-FixtureCheck $validationVariants[1] 12).Status='Partial'
+    $validationVariants[2].Elevated=$null
+    (Get-FixtureCheck $validationVariants[2] 12).Findings[0].Evidence.Right='WriteDacl'
+    foreach ($variant in $validationVariants) {
+        $result=Get-StealthPrivescAttackPathAnalysis $variant
+        Assert-Path ($result.EngineVersion -eq '1.1') 'Prerequisite guidance advances the engine version.'
+        foreach ($path in $result.Paths) {
+            Assert-Path ($path.PrerequisiteActions.Count -eq $path.Prerequisites.Count) 'Every compatibility prerequisite has a structured action.'
+            foreach ($action in $path.PrerequisiteActions) {
+                Assert-Path ($action.Status -eq 'Unresolved' -and $action.Commands.Count -gt 0 -and $action.ResolutionCriteria -and $action.RemainingUncertainty -and $action.Description -in $path.Prerequisites) 'Actions explain commands, resolution criteria and uncertainty without assuming success.'
+                foreach ($command in $action.Commands) {
+                    Assert-Path ($command.Mode -eq 'ReadOnly' -and $command.Purpose -and $command.RunContext -and $command.ExpectedResult) 'Each command has context and expected evidence.'
+                    $tokens=$null; $errors=$null
+                    $commandAst=[Management.Automation.Language.Parser]::ParseInput($command.Command,[ref]$tokens,[ref]$errors)
+                    Assert-Path ($errors.Count -eq 0) 'Generated commands parse on this PowerShell edition.'
+                    $names=@($commandAst.FindAll({param($node) $node -is [Management.Automation.Language.CommandAst]},$true) | ForEach-Object { $_.GetCommandName() })
+                    Assert-Path (@($names | Where-Object { $_ -match '^(Start-Service|Stop-Service|Restart-Service|Start-ScheduledTask|Set-Acl|Set-ItemProperty|Invoke-Expression|Enable-ScheduledTask|Set-AppLockerPolicy)$' }).Count -eq 0) 'Prerequisites do not change host configuration or trigger execution.'
+                }
+            }
+        }
+    }
+    $result=Get-StealthPrivescAttackPathAnalysis $validationVariants[1]
+    Assert-Path ((($result.Paths | Where-Object RuleId -eq ServiceConfiguration).PrerequisiteActions.Id -contains 'CollectionCompleteness')) 'Incomplete evidence has focused rerun instructions.'
+    Assert-Path ((($result.Paths | Where-Object RuleId -eq ServiceConfiguration).PrerequisiteActions.Id -contains 'StartingPrivilege')) 'Elevated evidence has non-elevated reassessment instructions.'
+    $result=Get-StealthPrivescAttackPathAnalysis $validationVariants[2]
+    Assert-Path ((($result.Paths | Where-Object RuleId -eq ServiceConfiguration).PrerequisiteActions.Id -contains 'StartingPrivilege')) 'Unknown starting privilege has concrete identity verification.'
+    $quoted=New-PathFixture
+    $name='Acme''; Invoke-Expression ''NEVER_EXECUTE_REPORT_TEXT''; # __RESOURCE__ $(throw ''NEVER_EXECUTE_REPORT_TEXT'')'
+    (Get-FixtureCheck $quoted 11).Findings[0].Target=$name
+    (Get-FixtureCheck $quoted 12).Findings[0].Target=$name
+    (Get-FixtureCheck $quoted 11).Verification.RerunCommand='Invoke-Expression NEVER_COPY_RERUN_SOURCE'
+    $generated=(Get-StealthPrivescAttackPathAnalysis $quoted).Paths | Where-Object RuleId -eq ServiceConfiguration
+    $serviceAction=$generated.PrerequisiteActions | Where-Object Id -eq ServiceExecution
+    $serviceCommand=$serviceAction.Commands[0].Command
+    $parsed=[Management.Automation.Language.Parser]::ParseInput($serviceCommand,[ref]$tokens,[ref]$errors)
+    $literalValues=@($parsed.FindAll({param($node) $node -is [Management.Automation.Language.StringConstantExpressionAst]},$true) | ForEach-Object Value)
+    $called=@($parsed.FindAll({param($node) $node -is [Management.Automation.Language.CommandAst]},$true) | ForEach-Object { $_.GetCommandName() })
+    Assert-Path ($errors.Count -eq 0 -and $literalValues -contains $name -and $called -notcontains 'Invoke-Expression') 'Quotes, substitution text and placeholder-looking names remain literal data.'
+    Assert-Path (($generated.PrerequisiteActions | ConvertTo-Json -Depth 10) -notmatch 'NEVER_COPY_RERUN_SOURCE') 'New instructions do not trust executable rerun text from imported reports.'
+    $scoped=New-PathFixture
+    $scoped | Add-Member NoteProperty Scope @{Network=$true;Domain=$false;Sensitive=$false;MaxItems=75;MaxFileBytes=2048;CommandTimeoutSeconds=30}
+    $safeScan=New-PrerequisiteScanCommand $scoped @(11,12)
+    Assert-Path ($safeScan.Command -match '-IncludeNetwork' -and $safeScan.Command -notmatch '-IncludeDomain|-IncludeSensitive' -and $safeScan.Command -match '-MaxItems 75 -MaxFileBytes 2048 -CommandTimeoutSeconds 30') 'Focused reruns retain valid recorded limits and enabled scopes.'
+    $scoped.Scope.MaxItems='10; Invoke-Expression NEVER_EXECUTE_REPORT_TEXT'
+    $scoped.Scope.Sensitive='true'
+    $safeScan=New-PrerequisiteScanCommand $scoped @(11,12)
+    Assert-Path ($safeScan.Command -notmatch 'NEVER_EXECUTE_REPORT_TEXT|-IncludeSensitive|-MaxItems') 'Untrusted option strings cannot become executable command arguments or enable scope.'
+    $prefixPath=$analysis.Paths | Where-Object RuleId -eq ServiceUnquotedPath
+    $prefixAction=$prefixPath.PrerequisiteActions | Where-Object Id -eq ExecutableSearchOrder
+    & {
+        function Get-Item {
+            param($LiteralPath,[switch]$Force,$ErrorAction)
+            if ($LiteralPath -eq 'C:\Program.exe') { throw [UnauthorizedAccessException]::new('Fixture denial') }
+            if ($LiteralPath -eq 'C:\Program Files\Acme\svc.exe') { return [pscustomobject]@{PSIsContainer=$false;Attributes='Archive'} }
+            throw [Management.Automation.ItemNotFoundException]::new('Fixture absence')
+        }
+        $observed=@(& ([scriptblock]::Create($prefixAction.Commands[0].Command)))
+        Assert-Path ($observed[0].Path -eq 'C:\Program.exe' -and $observed[0].State -eq 'Unknown' -and $observed[-1].State -eq 'Present') 'Prefix commands preserve order and distinguish denied access from absence.'
+    }
+    $taskPath=$analysis.Paths | Where-Object RuleId -eq TaskImage
+    $taskAction=$taskPath.PrerequisiteActions | Where-Object Id -eq TaskExecution
+    Assert-Path ($taskAction.Commands[0].Command -match 'Get-ScheduledTaskInfo' -and $taskAction.Commands[0].Command -match 'AllowDemandStart' -and $taskAction.Commands[0].Command -match 'LogonType') 'Task instructions cover timing, settings and principal restrictions.'
+    $rendered=ConvertTo-AttackPathHtml (Get-StealthPrivescAttackPathAnalysis $hostile)
+    Assert-Path ($rendered -match 'Resolution criteria:' -and $rendered -match 'Look for:' -and $rendered -match 'Still requires review:' -and $rendered -notmatch '<script>') 'HTML exposes and escapes the prerequisite instructions.'
+    $legacy=Get-StealthPrivescAttackPathAnalysis (New-PathFixture)
+    foreach ($path in $legacy.Paths) { $path.PSObject.Properties.Remove('PrerequisiteActions') }
+    Assert-Path ((ConvertTo-AttackPathHtml $legacy) -match 'Unresolved prerequisites') 'Older paths containing only prerequisite strings still render.'
+
     $scratch=Join-Path ([IO.Path]::GetTempPath()) ('StealthPrivesc-paths-'+[Guid]::NewGuid().ToString('N'))
     try {
         # Exercise report rendering with synthetic paths and real evidence anchors.
@@ -118,6 +189,7 @@ Import-Module (Join-Path $PSScriptRoot '../src/StealthPrivesc.psd1') -Force
         Assert-Path ($saved -match 'Attack path candidates' -and $saved -match 'href="#check-12-finding-0"' -and $saved -match 'id="check-12-finding-0"') 'HTML candidates link to actual source findings.'
         $decoded=Get-Content (Get-ChildItem $scratch -Filter '*.json').FullName -Raw | ConvertFrom-Json
         Assert-Path ($decoded.AttackPathAnalysis.Paths.Count -eq 6) 'JSON persists structured paths.'
+        Assert-Path ($decoded.AttackPathAnalysis.Paths[0].PrerequisiteActions[0].Commands.Count -gt 0) 'JSON persists prerequisite command and interpretation metadata.'
         & {
             function Invoke-Check { param([int]$Id) Add-Evidence 'fixture' 'No mutation.' }
             $run=Invoke-StealthPrivesc -CheckId 1 -PassThru

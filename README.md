@@ -73,6 +73,20 @@ After collection, the scanner automatically correlates the evidence and places r
 
 Each candidate includes a chain of observed facts, supporting check/finding links, unresolved prerequisites, remediation, and the source checks' rerun commands. `Corroborated` means the required control and execution-context facts were observed; it does not mean exploitation succeeded. Directory control, ownership/DACL rights, and scheduler authorization remain conditional. Incomplete checks lower confidence. Access found under an already elevated token is classified as `PrivilegedAuditExposure`, with informational priority.
 
+Expand **Unresolved prerequisites** to see commands for each item, where to run them, what output to look for, resolution criteria, and remaining uncertainty. The commands inspect identity, ACLs, service/task configuration, triggers, application-control policy and ambiguous executable prefixes, or rerun the relevant scanner checks. Run them manually on the assessed computer as the intended user; scanner commands run from its checkout. Commands are generated instructions, not commands the engine has already executed. They do not automatically resolve an item or change host configuration. When metadata cannot prove runtime behavior or authorization, that limitation remains explicit.
+
+JSON exposes the same instructions under `AttackPathAnalysis.Paths[].PrerequisiteActions`, with `Id`, `Description`, `Status`, `Commands`, `ResolutionCriteria`, and `RemainingUncertainty`. Each command has `Purpose`, `Command`, `ExpectedResult`, `RunContext`, and `Mode`. The original `Prerequisites` string array remains available for existing consumers. For a returned candidate:
+
+```powershell
+$path = $report.AttackPathAnalysis.Paths | Select-Object -First 1
+$path.PrerequisiteActions | ForEach-Object {
+    $_.Description
+    $_.Commands | Format-List Purpose,Command,ExpectedResult,RunContext
+}
+```
+
+Focused prerequisite reruns retain valid numeric limits and explicit opt-ins from the original report. They rebuild command arguments from typed metadata, and use fixed service/task check locations; review custom search/reference paths separately when reproducing the complete scan. Native prerequisite queries include [service trigger configuration](https://learn.microsoft.com/en-us/windows/win32/services/service-trigger-events) and [scheduled-task run information](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/get-scheduledtaskinfo?view=windowsserver2025-ps).
+
 | Correlation rule | Required checks |
 |---|---|
 | SYSTEM service configuration control | 11 + 12 |

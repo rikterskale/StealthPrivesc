@@ -81,7 +81,7 @@ Import-Module (Join-Path $PSScriptRoot '../src/StealthPrivesc.psd1') -Force
     $scratch=Join-Path ([IO.Path]::GetTempPath()) ('StealthPrivesc-verification-'+[Guid]::NewGuid().ToString('N'))
     try {
         $report=Invoke-StealthPrivesc -CheckId 1,3,7,47,67,70,100,132 -MaxItems 10 -OutputDirectory $scratch -PassThru
-        Assert-Verification ($report.SchemaVersion -eq '1.4') 'Verification and correlation fields use the current schema.'
+        Assert-Verification ($report.SchemaVersion -eq '1.5') 'Verification and correlation fields use the current schema.'
         foreach ($check in $report.Checks) {
             Assert-Verification ($check.Verification.RerunCommand -match "-CheckId $($check.Id) ") 'Every selected check has a rerun command.'
             if ($check.Id -in @(67,70,132)) {

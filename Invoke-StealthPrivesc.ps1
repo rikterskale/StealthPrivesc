@@ -48,6 +48,8 @@ Checks.Verification includes command records, implementation references and a
 per-check rerun command preserving the current scope and collection settings.
 AttackPathAnalysis contains post-scan candidate chains, evidence references,
 unresolved prerequisites and correlation coverage.
+Each PrerequisiteActions entry includes manual validation commands, expected
+evidence, run context and resolution criteria.
 Warnings are written separately from the returned object.
 
 .EXAMPLE

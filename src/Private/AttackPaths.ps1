@@ -64,20 +64,13 @@ function New-AttackPathCandidate {
     $confidence = if ($incomplete -or $assessment -eq 'UnknownStartingPrivilege') { 'Limited' } elseif ($Indirect) { 'Conditional' } else { 'Corroborated' }
     $priority = if ($assessment -eq 'PrivilegedAuditExposure') { 'Information' } elseif ($confidence -eq 'Corroborated') { 'High' } else { 'Medium' }
     $isTask = $Rule.Id.StartsWith('Task')
-    $prerequisites = New-Object 'System.Collections.Generic.List[string]'
-    $prerequisites.Add('Confirm that the account, object and permissions still match this snapshot, including integrity policy and other runtime access restrictions.')
-    if ($Indirect) { $prerequisites.Add('Directory creation rights or ownership/DACL control do not establish direct file replacement or object modification; validate the precise access needed.') }
     if ($isTask) {
         $trigger = 'The task was reported enabled; timing, conditions and permission to invoke it are unverified.'
-        $prerequisites.Add('Validate the task trigger, scheduler authorization, logon restrictions and application-control policy before treating execution as reachable.')
     } else {
         $rights = @($Supporting | Where-Object CheckId -eq 20 | ForEach-Object { Get-AttackPathValue $_.Evidence 'Right' } | Sort-Object -Unique)
         $trigger = if ($rights.Count) { 'Observed service control rights: ' + ($rights -join ', ') + '. No transition was performed.' } else { 'Service activation or restart capability was not established by the available evidence.' }
-        $prerequisites.Add('Validate service activation/reload behavior and application-control policy; a control permission does not establish that modified content will execute.')
-        if ($Rule.Id -eq 'ServiceUnquotedPath') { $prerequisites.Add('Validate executable search order and earlier existing candidates; an ambiguous prefix alone does not prove interception.') }
     }
-    if ($incomplete) { $prerequisites.Add('Supporting collection or the overall run was incomplete; review source check diagnostics and enumeration limits.') }
-    if ($assessment -eq 'PrivilegedAuditExposure') { $prerequisites.Add('The scan already used an elevated token. Reassess as the intended low-privilege identity before claiming escalation.') }
+    $prerequisiteActions = @(New-AttackPathPrerequisiteActions -Report $Report -Rule $Rule -Inventory $Inventory -Supporting $Supporting -Resource $Resource -Indirect $Indirect -Incomplete $incomplete -Assessment $assessment)
     $identity = [string](Get-AttackPathValue $Report 'UserSid')
     if (-not $identity) { $identity = [string](Get-AttackPathValue $Report 'User') }
     $key = $Rule.Id + '|' + $Inventory.Target.ToLowerInvariant() + '|' + $Resource.ToLowerInvariant()
@@ -100,7 +93,8 @@ function New-AttackPathCandidate {
             [pscustomobject]@{Order=2; Description=$Relation; Evidence=@("check-$($Inventory.CheckId)-finding-$($Inventory.FindingIndex)") + @($Supporting | Where-Object CheckId -ne 20 | ForEach-Object { "check-$($_.CheckId)-finding-$($_.FindingIndex)" })}
             [pscustomobject]@{Order=3; Description=$trigger; Evidence=@($Supporting | Where-Object CheckId -eq 20 | ForEach-Object { "check-$($_.CheckId)-finding-$($_.FindingIndex)" })}
         )
-        Prerequisites=$prerequisites.ToArray(); EvidenceReferences=$evidenceRefs; VerificationCommands=$reruns
+        Prerequisites=@($prerequisiteActions | ForEach-Object Description); PrerequisiteActions=$prerequisiteActions
+        EvidenceReferences=$evidenceRefs; VerificationCommands=$reruns
         Remediation=$(if ($isTask) { 'Restrict write/control rights on the task definition and its executable paths; review the need for the SYSTEM principal.' } else { 'Restrict service, registry and executable-path control to intended administrators; review the service account and quote executable paths.' })
     }
 }
@@ -230,7 +224,7 @@ function Get-StealthPrivescAttackPathAnalysis {
     $ordered = @($candidates.Values | Sort-Object @{Expression={$priorityOrder[$_.Priority]}},RuleId,Target,Resource,Id)
     $limited = $inputTruncated -or $discoveryLimited -or $ordered.Count -gt $MaxPaths -or @($coverage | Where-Object Status -ne 'Evaluated').Count -gt 0 -or (Get-AttackPathValue $Report 'RunStatus') -ne 'Completed'
     [pscustomobject]@{
-        EngineVersion='1.0'; Status=$(if ($limited) {'Partial'} else {'Completed'})
+        EngineVersion='1.1'; Status=$(if ($limited) {'Partial'} else {'Completed'})
         Paths=@($ordered | Select-Object -First $MaxPaths); TotalCandidates=$ordered.Count
         MaxPaths=$MaxPaths; OmittedPaths=[Math]::Max(0,$ordered.Count-$MaxPaths)
         CandidateBudget=$candidateBudget; DiscoveryTruncated=$discoveryLimited
@@ -251,9 +245,15 @@ function ConvertTo-AttackPathHtml {
         foreach ($step in $path.Steps) { [void]$html.Append('<li>' + [Net.WebUtility]::HtmlEncode($step.Description) + '</li>') }
         [void]$html.Append('</ol><h4>Supporting evidence</h4><ul>')
         foreach ($reference in $path.EvidenceReferences) { [void]$html.Append('<li><a href="#' + [Net.WebUtility]::HtmlEncode($reference.Anchor) + '">' + [Net.WebUtility]::HtmlEncode("Check $($reference.CheckId), finding $($reference.FindingIndex): $($reference.Target) [$($reference.CheckStatus)]") + '</a></li>') }
-        [void]$html.Append('</ul><h4>Unresolved prerequisites</h4><ul>')
-        foreach ($item in $path.Prerequisites) { [void]$html.Append('<li>' + [Net.WebUtility]::HtmlEncode($item) + '</li>') }
-        [void]$html.Append('</ul><h4>Verify supporting checks</h4>')
+        [void]$html.Append('</ul><h4>Unresolved prerequisites</h4>')
+        $actions = @(Get-AttackPathValue $path 'PrerequisiteActions' | Where-Object { $null -ne $_ })
+        if ($actions.Count) { [void]$html.Append((ConvertTo-PrerequisiteActionsHtml $actions)) }
+        else {
+            [void]$html.Append('<ul>')
+            foreach ($item in $path.Prerequisites) { [void]$html.Append('<li>' + [Net.WebUtility]::HtmlEncode($item) + '</li>') }
+            [void]$html.Append('</ul>')
+        }
+        [void]$html.Append('<h4>Verify supporting checks</h4>')
         foreach ($command in $path.VerificationCommands) { [void]$html.Append('<p>' + [Net.WebUtility]::HtmlEncode("Check $($command.CheckId) | Working directory: $($command.WorkingDirectory)") + '</p><pre>' + [Net.WebUtility]::HtmlEncode($command.Command) + '</pre>') }
         [void]$html.Append('<p>' + [Net.WebUtility]::HtmlEncode($path.Remediation) + '</p></details>')
     }

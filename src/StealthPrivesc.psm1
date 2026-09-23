@@ -38,7 +38,7 @@ function Invoke-StealthPrivesc {
     $script:RunDiagnostics = New-Object 'System.Collections.Generic.List[object]'
     $identity = $null; $paths = $null; $failure = $null; $phase = 'Selection'
     $report = [ordered]@{
-        SchemaVersion = '1.4'; ToolVersion = '0.2.0'; StartedUtc = [DateTime]::UtcNow.ToString('o')
+        SchemaVersion = '1.5'; ToolVersion = '0.2.0'; StartedUtc = [DateTime]::UtcNow.ToString('o')
         RunStatus = 'Running'; Computer = $env:COMPUTERNAME; User = $null; UserSid = $null
         Elevated = $null; ProcessArchitecture = $(if ([Environment]::Is64BitProcess) { 'x64' } else { 'x86' })
         PowerShellVersion = $PSVersionTable.PSVersion.ToString()
@@ -121,7 +121,7 @@ function Invoke-StealthPrivesc {
         $script:RunDiagnostics.Add($diagnostic)
         Write-DiagnosticLog $diagnostic
         Write-Warning (Format-AssessmentDiagnostic $diagnostic) -WarningAction Continue
-        $report.AttackPathAnalysis = [pscustomobject]@{EngineVersion='1.0';Status='Error';Paths=@();TotalCandidates=0;OmittedPaths=0;RuleCoverage=@();Limitations=@('Correlation failed; no conclusion can be drawn from the empty path list. Original findings remain available.')}
+        $report.AttackPathAnalysis = [pscustomobject]@{EngineVersion='1.1';Status='Error';Paths=@();TotalCandidates=0;OmittedPaths=0;RuleCoverage=@();Limitations=@('Correlation failed; no conclusion can be drawn from the empty path list. Original findings remain available.')}
     }
     $report.FinishedUtc = [DateTime]::UtcNow.ToString('o')
     $report.Summary = [ordered]@{}
