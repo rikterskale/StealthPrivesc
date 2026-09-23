@@ -22,7 +22,7 @@ function Invoke-ObjectAccessCheck {
                         $sd=New-Object Security.AccessControl.RawSecurityDescriptor($sddl)
                         $bytes=New-Object byte[] $sd.BinaryLength;$sd.GetBinaryForm($bytes,0)
                         Add-DescriptorRights ($task.TaskPath+$task.TaskName) $bytes @{UpdateTask=2;WriteDacl=0x40000;WriteOwner=0x80000} @(0x120089,0x120116,0x1200a0,0x1f01ff) @{Account=$task.Principal.UserId;Enabled=$true;Source='IRegisteredTask.GetSecurityDescriptor'}
-                    }catch{Set-CheckPartial "Cannot read registered task security: $($task.TaskPath)$($task.TaskName)"}
+                    }catch{Set-CheckPartial "Cannot read registered task security: $($task.TaskPath)$($task.TaskName)" -ErrorRecord $_}
                     finally{if($registered){[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($registered)};if($folder){[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($folder)}}
                 }
             }finally{[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($scheduler)}
@@ -31,10 +31,10 @@ function Invoke-ObjectAccessCheck {
             $clock=[Diagnostics.Stopwatch]::StartNew()
             foreach($pipe in Get-Limited @([IO.Directory]::GetFiles('\\.\pipe\'))){
                 if($clock.Elapsed.TotalSeconds-ge60){Set-CheckPartial 'Pipe inspection reached its 60-second budget.';break}
-                try{$result=Invoke-IsolatedNativeQuery Pipe $pipe}catch{Set-CheckPartial 'A pipe metadata query failed or timed out.';continue}
+                try{$result=Invoke-IsolatedNativeQuery Pipe $pipe}catch{Set-CheckPartial 'A pipe metadata query failed or timed out.' -ErrorRecord $_;continue}
                 if($result.OpenError){Set-CheckPartial 'Some pipes were busy, inaccessible or disappeared before inspection.';continue}
                 $context=@{ServerProcessId=$result.ServerProcessId;ServerOwnerSid=$null;ServerQueryError=$result.ServerError}
-                if($result.ServerProcessId){try{$process=Get-CimInstance Win32_Process -Filter "ProcessId=$($result.ServerProcessId)" -ErrorAction Stop;$owner=Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid -ErrorAction Stop;if($owner.ReturnValue-eq0){$context.ServerOwnerSid=$owner.Sid}else{Set-CheckPartial 'Some pipe server owners are inaccessible.'}}catch{Set-CheckPartial 'Some pipe server owners are inaccessible.'}}
+                if($result.ServerProcessId){try{$process=Get-CimInstance Win32_Process -Filter "ProcessId=$($result.ServerProcessId)" -ErrorAction Stop;$owner=Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid -ErrorAction Stop;if($owner.ReturnValue-eq0){$context.ServerOwnerSid=$owner.Sid}else{Set-CheckPartial 'Some pipe server owners are inaccessible.'}}catch{Set-CheckPartial 'Some pipe server owners are inaccessible.' -ErrorRecord $_}}
                 Add-Evidence $pipe 'Pipe security inspected through a metadata-only identification-level connection; no data exchanged.' $context
                 if($result.Descriptor){Add-DescriptorRights $pipe $result.Descriptor @{WriteData=2;CreateInstance=4;WriteDacl=0x40000;WriteOwner=0x80000} @(0x120089,0x120116,0x1200a0,0x1f01ff) $context}
                 else{Set-CheckPartial 'Some pipe security descriptors could not be read.'}
@@ -49,7 +49,7 @@ function Invoke-ObjectAccessCheck {
                 if($clock.Elapsed.TotalSeconds-ge60){Set-CheckPartial 'Device inspection reached its 60-second budget.';break}
                 if($entry.Type-ne'Device'){continue}
                 $path='\Device\'+$entry.Name
-                try{$security=Invoke-IsolatedNativeQuery Device $path}catch{Set-CheckPartial 'A device descriptor query failed or timed out.';continue}
+                try{$security=Invoke-IsolatedNativeQuery Device $path}catch{Set-CheckPartial 'A device descriptor query failed or timed out.' -ErrorRecord $_;continue}
                 if($security.Descriptor){Add-DescriptorRights $path $security.Descriptor @{WriteData=2;WriteDacl=0x40000;WriteOwner=0x80000} @(0x120089,0x120116,0x1200a0,0x1f01ff)}
                 else{Set-CheckPartial 'Some device descriptors are inaccessible or the device does not support metadata opens.'}
             }

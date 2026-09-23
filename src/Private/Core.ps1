@@ -4,19 +4,41 @@ function Add-Evidence {
     $script:Current.Findings.Add([pscustomobject]@{ Severity=$Severity; Target=$Target; Observation=$Observation; Evidence=$Evidence; Remediation=$Remediation })
 }
 function Set-CheckPartial {
-    param([string]$Reason)
+    param([string]$Reason, [System.Management.Automation.ErrorRecord]$ErrorRecord)
     if ($script:Current.Status -eq 'Completed') { $script:Current.Status = 'Partial' }
     if (-not $script:Current.Limitations.Contains($Reason)) { $script:Current.Limitations.Add($Reason) }
+    Add-CheckDiagnostic -Reason $Reason -ErrorRecord $ErrorRecord
 }
-function Set-CheckSkipped { param([string]$Reason) $script:Current.Status='Skipped'; $script:Current.Limitations.Add($Reason) }
+function Set-CheckSkipped {
+    param([string]$Reason, [string]$SkipReason = 'PrerequisiteMissing', [string]$RequiredSwitch = '')
+    $script:Current.Status='Skipped'; $script:Current.Limitations.Add($Reason)
+    Add-CheckDiagnostic -Reason $Reason -Level Warning -SkipReason $SkipReason -RequiredSwitch $RequiredSwitch
+}
 function Get-Cached {
     param([string]$Key, [scriptblock]$Factory)
     if (-not $script:Context.Cache.ContainsKey($Key)) {
         $before=@($script:Current.Limitations)
+        $diagnosticsBefore = if ($script:Current.Contains('Diagnostics')) { @($script:Current.Diagnostics | ForEach-Object { $_ }) } else { @() }
         $data=@(& $Factory)
-        $script:Context.Cache[$Key] = @{Data=$data;Limitations=@($script:Current.Limitations|Where-Object{$_ -notin $before})}
+        $diagnostics = if ($script:Current.Contains('Diagnostics')) { @($script:Current.Diagnostics | Where-Object { $_ -notin $diagnosticsBefore }) } else { @() }
+        $script:Context.Cache[$Key] = @{Data=$data;Limitations=@($script:Current.Limitations|Where-Object{$_ -notin $before});Diagnostics=$diagnostics}
     }
-    foreach($limitation in $script:Context.Cache[$Key].Limitations){Set-CheckPartial $limitation}
+    foreach($limitation in $script:Context.Cache[$Key].Limitations){
+        if ($script:Current.Status -eq 'Completed') { $script:Current.Status = 'Partial' }
+        if (-not $script:Current.Limitations.Contains($limitation)) { $script:Current.Limitations.Add($limitation) }
+    }
+    foreach ($cached in $script:Context.Cache[$Key].Diagnostics) {
+        if (-not $script:Current.Contains('Diagnostics')) { $script:Current['Diagnostics'] = New-Object 'System.Collections.Generic.List[object]' }
+        if (@($script:Current.Diagnostics | Where-Object { $_.Summary -eq $cached.Summary -and $_.Code -eq $cached.Code }).Count) { continue }
+        $copy = $cached.PSObject.Copy()
+        $copy.TimestampUtc = [DateTime]::UtcNow.ToString('o')
+        $copy.CheckId = if ($script:Current.Contains('Id')) { $script:Current.Id } else { $null }
+        $copy.CheckTitle = if ($script:Current.Contains('Title')) { $script:Current.Title } else { '' }
+        $copy.RetryCommand = if ($null -ne $copy.CheckId -and $cached.RetryCommand) { $cached.RetryCommand -replace '-CheckId \d+', "-CheckId $($copy.CheckId)" } else { $null }
+        $script:Current.Diagnostics.Add($copy)
+        Write-DiagnosticLog $copy
+        Write-Verbose (Format-AssessmentDiagnostic $copy)
+    }
     $script:Context.Cache[$Key].Data
 }
 function Get-Services { Get-Cached 'Services' { Get-CimInstance Win32_Service -ErrorAction Stop | Select-Object Name,DisplayName,PathName,StartName,StartMode,State,ProcessId } }
@@ -44,7 +66,7 @@ function Get-RegistryChildren {
         $children|Select-Object -First $remaining
     }
     catch [System.Management.Automation.ItemNotFoundException] { @() }
-    catch { Set-CheckPartial "Cannot enumerate registry key: $Path"; @() }
+    catch { Set-CheckPartial "Cannot enumerate registry key: $Path" -ErrorRecord $_; @() }
 }
 function Read-Registry {
     param([string]$Path, [string]$Name)
@@ -55,7 +77,7 @@ function Read-Registry {
             [pscustomobject]@{ State='Present'; Value=$key.GetValue($Name,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames) }
         } finally { $key.Close() }
     } catch [System.Management.Automation.ItemNotFoundException] { [pscustomobject]@{ State='Absent'; Value=$null } }
-    catch { Set-CheckPartial "Cannot read registry value: $Path [$Name]"; [pscustomobject]@{ State='Unknown'; Value=$null } }
+    catch { Set-CheckPartial "Cannot read registry value: $Path [$Name]" -ErrorRecord $_; [pscustomobject]@{ State='Unknown'; Value=$null } }
 }
 function Add-RegistryEvidence {
     param([string]$Path, [string[]]$Names, [string[]]$SensitiveNames = @())
@@ -83,7 +105,7 @@ function Get-BoundedFiles {
             if($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint){Set-CheckPartial 'Reparse-point traversal skipped.';continue}
             $children=@(Get-ChildItem -LiteralPath $entry[0] -Force -ErrorAction Stop | Select-Object -First ($script:Context.MaxItems + 1))
         } catch [System.Management.Automation.ItemNotFoundException] { continue }
-        catch { Set-CheckPartial "Cannot enumerate directory: $($entry[0])"; continue }
+        catch { Set-CheckPartial "Cannot enumerate directory: $($entry[0])" -ErrorRecord $_; continue }
         foreach($item in $children) {
             $visited++
             if($visited -gt $script:Context.MaxItems){ break }
@@ -128,7 +150,7 @@ function Test-PathAccess {
         }
         [pscustomobject]@{ Path=$Path; Rights=$allowed; Owner=$acl.Owner; Method='Windows AccessCheck (DACL); mandatory integrity, locks and execution context require validation.' }
     } catch [System.Management.Automation.ItemNotFoundException] { $null }
-    catch { Set-CheckPartial "Cannot assess ACL: $Path"; $null }
+    catch { Set-CheckPartial "Cannot assess ACL: $Path" -ErrorRecord $_; $null }
 }
 function Add-WritablePath {
     param([string]$Path, [string]$Reason, [switch]$Registry)
@@ -157,8 +179,18 @@ function Invoke-ReadOnlyCommand {
     try {
         [void]$process.Start()
         $stdout=$process.StandardOutput.ReadToEndAsync(); $stderr=$process.StandardError.ReadToEndAsync()
-        if(-not $process.WaitForExit($script:Context.CommandTimeoutSeconds*1000)){ $process.Kill(); throw [TimeoutException]::new('Command timeout') }
-        if($process.ExitCode -ne 0){ throw [InvalidOperationException]::new('Read-only command returned an error') }
+        if(-not $process.WaitForExit($script:Context.CommandTimeoutSeconds*1000)){
+            $failure = [TimeoutException]::new('Read-only helper exceeded its time limit.')
+            $failure.Data['StealthPrivesc.TimeoutSeconds'] = [int]$script:Context.CommandTimeoutSeconds
+            # Preserve the timeout diagnosis if the process exits while being killed.
+            try { $process.Kill() } catch [InvalidOperationException] { }
+            throw $failure
+        }
+        if($process.ExitCode -ne 0){
+            $failure = [InvalidOperationException]::new('Read-only helper returned a nonzero exit code.')
+            $failure.Data['StealthPrivesc.ExitCode'] = [int]$process.ExitCode
+            throw $failure
+        }
         $stdout.GetAwaiter().GetResult()
     } finally { $process.Dispose() }
 }
@@ -180,7 +212,7 @@ function Find-SecretMarkers {
         $markers=@($patterns.Keys | Where-Object { [regex]::IsMatch($content,$patterns[$_]) })
         if($markers.Count){ Add-Evidence $file.FullName 'Possible secret-bearing content; values redacted, heuristic requires review.' @{Markers=$markers;Values='[REDACTED]';Bytes=$file.Length} 'Medium' 'Remove embedded secrets, restrict access and rotate exposed credentials after confirming exposure.' }
     } catch [System.Management.Automation.ItemNotFoundException] { }
-    catch { Set-CheckPartial "Cannot inspect file: $Path" }
+    catch { Set-CheckPartial "Cannot inspect file: $Path" -ErrorRecord $_ }
 }
 function Add-Artifact {
     param([string]$Path,[string]$Kind,[switch]$Inspect)
@@ -190,7 +222,7 @@ function Add-Artifact {
         Add-Evidence $item.FullName "$Kind artifact present; presence alone does not prove credential exposure." @{IsDirectory=$item.PSIsContainer;LastWriteUtc=$item.LastWriteTimeUtc.ToString('o');Values='[REDACTED]'}
         if($Inspect -and -not $item.PSIsContainer){ Find-SecretMarkers $item.FullName }
     } catch [System.Management.Automation.ItemNotFoundException] { }
-    catch { Set-CheckPartial "Cannot inspect artifact: $Path" }
+    catch { Set-CheckPartial "Cannot inspect artifact: $Path" -ErrorRecord $_ }
 }
 function Test-AllowedLocalPath {
     param([string]$Path)
@@ -208,12 +240,10 @@ function Test-AllowedLocalPath {
     return $true
 }
 function Export-Assessment {
-    param([object]$Report,[string]$Directory)
-    $directoryPath=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Directory)
-    [void][IO.Directory]::CreateDirectory($directoryPath)
-    $stamp=[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ')+'-'+[Guid]::NewGuid().ToString('N').Substring(0,6)
-    $jsonPath=Join-Path $directoryPath "assessment-$stamp.json"
-    $htmlPath=Join-Path $directoryPath "assessment-$stamp.html"
+    param([object]$Report,[string]$Directory,[hashtable]$Paths)
+    if (-not $Paths) { $Paths = Initialize-AssessmentOutput -Directory $Directory }
+    $jsonPath=$Paths.Json
+    $htmlPath=$Paths.Html
     $Report | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $jsonPath -Encoding UTF8
     $html=New-Object Text.StringBuilder
     [void]$html.Append('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Windows exposure assessment</title><style>body{font:16px system-ui;max-width:1100px;margin:40px auto;padding:0 24px;background:#101820;color:#e5edf3}h1,h2{color:#82d4d4}article{border:1px solid #38505c;padding:16px;margin:16px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}small{color:#b9cbd5}.High,.Medium{border-left:4px solid #ffbd69}summary{cursor:pointer}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #38505c}</style><h1>Windows exposure assessment</h1>')
@@ -225,9 +255,28 @@ function Export-Assessment {
         [void]$html.Append('<tr><th scope="row">'+[Net.WebUtility]::HtmlEncode($status)+'</th><td>'+[Net.WebUtility]::HtmlEncode([string]$count)+'</td></tr>')
     }
     [void]$html.Append('</tbody></table></section>')
+    $hasSkipSummary = if ($Report -is [Collections.IDictionary]) { $Report.Contains('SkippedChecks') } else { [bool]$Report.PSObject.Properties['SkippedChecks'] }
+    if ($hasSkipSummary) {
+        $skippedChecks = @($Report.SkippedChecks)
+        [void]$html.Append('<section aria-labelledby="skipped-checks"><h2 id="skipped-checks">Skipped checks: ' + @($skippedChecks).Count + '</h2>')
+        if (@($skippedChecks).Count -eq 0) { [void]$html.Append('<p>No selected checks were marked as skipped. Review run errors, partial and unsupported results separately.</p>') }
+        foreach ($skipped in $skippedChecks) {
+            [void]$html.Append('<h3>' + [Net.WebUtility]::HtmlEncode("$($skipped.CheckId). $($skipped.Title)") + '</h3><p><strong>Why it did not run:</strong> ' + [Net.WebUtility]::HtmlEncode($skipped.Explanation) + '</p><ol>')
+            foreach ($action in $skipped.SuggestedActions) { [void]$html.Append('<li>' + [Net.WebUtility]::HtmlEncode($action) + '</li>') }
+            [void]$html.Append('</ol><p><strong>Retry selector:</strong> <code>' + [Net.WebUtility]::HtmlEncode($skipped.RetryCommand) + '</code> (keep your original paths and output options).</p><p>' + [Net.WebUtility]::HtmlEncode($skipped.Verification) + '</p>')
+        }
+        [void]$html.Append('</section>')
+    }
+    $runDiagnostics = if ($Report -is [Collections.IDictionary]) { $Report['Diagnostics'] } elseif ($Report.PSObject.Properties['Diagnostics']) { $Report.Diagnostics }
+    if ($runDiagnostics) {
+        [void]$html.Append('<h2>Run troubleshooting</h2>' + ((ConvertTo-DiagnosticHtml @($runDiagnostics | ForEach-Object { $_ })) -join ''))
+    }
     foreach($check in $Report.Checks){
         [void]$html.Append('<article><h2>'+[Net.WebUtility]::HtmlEncode("$($check.Id). $($check.Title)")+'</h2><p>'+[Net.WebUtility]::HtmlEncode("$($check.Status) / $($check.Coverage) | $($check.Findings.Count) evidence items")+'</p>')
         foreach($limitation in $check.Limitations){[void]$html.Append('<p><small>'+[Net.WebUtility]::HtmlEncode($limitation)+'</small></p>')}
+        if ($check.PSObject.Properties['Diagnostics']) {
+            [void]$html.Append(((ConvertTo-DiagnosticHtml @($check.Diagnostics | ForEach-Object { $_ })) -join ''))
+        }
         foreach($finding in $check.Findings){
             [void]$html.Append('<details class="'+$finding.Severity+'"><summary>'+[Net.WebUtility]::HtmlEncode("[$($finding.Severity)] $($finding.Target): $($finding.Observation)")+'</summary><pre>'+[Net.WebUtility]::HtmlEncode(($finding.Evidence | ConvertTo-Json -Depth 12))+'</pre><p>'+[Net.WebUtility]::HtmlEncode($finding.Remediation)+'</p></details>')
         }
@@ -236,6 +285,7 @@ function Export-Assessment {
     [void]$html.Append('</html>')
     [IO.File]::WriteAllText($htmlPath,$html.ToString())
     Write-Host "Reports: $jsonPath and $htmlPath"
+    Write-Host "Troubleshooting log: $($Paths.Log)"
 }
 function Read-SafeXml {
     param([string]$Path)

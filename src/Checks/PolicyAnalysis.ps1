@@ -44,12 +44,12 @@ function Invoke-PolicyAnalysisCheck {
             }
         }
         114 {
-            try{foreach($endpoint in Get-PSSessionConfiguration -ErrorAction Stop){Add-Evidence $endpoint.Name 'Remoting endpoint configuration.' ($endpoint|Select-Object Name,Permission,PSVersion,RunAsUser);$sddl=Get-OptionalProperty $endpoint 'SecurityDescriptorSddl';if($sddl){$sd=New-Object Security.AccessControl.RawSecurityDescriptor($sddl);$bytes=New-Object byte[] $sd.BinaryLength;$sd.GetBinaryForm($bytes,0);Add-DescriptorRights $endpoint.Name $bytes @{Execute=0x20;WriteDacl=0x40000;WriteOwner=0x80000} @(0x20005,0x20028,0x20020,0xf003f)}}}catch{Set-CheckPartial 'Remoting endpoint configuration unavailable or requires administrative access.'}
+            try{foreach($endpoint in Get-PSSessionConfiguration -ErrorAction Stop){Add-Evidence $endpoint.Name 'Remoting endpoint configuration.' ($endpoint|Select-Object Name,Permission,PSVersion,RunAsUser);$sddl=Get-OptionalProperty $endpoint 'SecurityDescriptorSddl';if($sddl){$sd=New-Object Security.AccessControl.RawSecurityDescriptor($sddl);$bytes=New-Object byte[] $sd.BinaryLength;$sd.GetBinaryForm($bytes,0);Add-DescriptorRights $endpoint.Name $bytes @{Execute=0x20;WriteDacl=0x40000;WriteOwner=0x80000} @(0x20005,0x20028,0x20020,0xf003f)}}}catch{Set-CheckPartial 'Remoting endpoint configuration unavailable or requires administrative access.' -ErrorRecord $_}
         }
         117 {
-            try{Invoke-PolicyCheck 117}catch{Set-CheckPartial 'Audit-policy or security-service inventory requires additional access.'}
+            try{Invoke-PolicyCheck 117}catch{Set-CheckPartial 'Audit-policy or security-service inventory requires additional access.' -ErrorRecord $_}
             Add-RegistryEvidence "$root\EventLog\EventForwarding\SubscriptionManager" @('1','2','3')
-            try{Add-Evidence 'Event forwarding' 'Configured collector subscription identifiers.' @{Subscriptions=(Invoke-ReadOnlyCommand "$env:SystemRoot\System32\wecutil.exe" 'es')}}catch{Set-CheckPartial 'Event collector subscription inventory inaccessible.'}
+            try{Add-Evidence 'Event forwarding' 'Configured collector subscription identifiers.' @{Subscriptions=(Invoke-ReadOnlyCommand "$env:SystemRoot\System32\wecutil.exe" 'es')}}catch{Set-CheckPartial 'Event collector subscription inventory inaccessible.' -ErrorRecord $_}
             foreach($path in @("$system\Services\SysmonDrv\Parameters","$system\Services\Sysmon64\Parameters")){Add-RegistryEvidence $path @('HashingAlgorithm','Options')}
         }
         123 {

@@ -58,7 +58,7 @@ function Invoke-PolicyCheck {
         }
         114 { foreach($endpoint in Get-PSSessionConfiguration -ErrorAction Stop){Add-Evidence $endpoint.Name 'PowerShell remoting endpoint.' ($endpoint|Select-Object Name,Permission,PSVersion,RunAsUser)} }
         115 {
-            try{foreach($av in Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -ErrorAction Stop){Add-Evidence $av.displayName 'Registered antivirus product.' ($av|Select-Object displayName,productState,timestamp)}}catch{Set-CheckPartial 'SecurityCenter2 antivirus inventory unavailable (common on Windows Server).'}
+            try{foreach($av in Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -ErrorAction Stop){Add-Evidence $av.displayName 'Registered antivirus product.' ($av|Select-Object displayName,productState,timestamp)}}catch{Set-CheckPartial 'SecurityCenter2 antivirus inventory unavailable (common on Windows Server).' -ErrorRecord $_}
             foreach($key in Get-RegistryChildren 'HKLM:\SOFTWARE\Microsoft\AMSI\Providers'){Add-Evidence $key.PSChildName 'Registered AMSI provider CLSID.'}
             foreach($service in Get-Services|Where-Object{$_.Name-match'(?i)WinDefend|Sense|WdNisSvc|Sysmon|CrowdStrike|Sentinel|Sophos|Carbon|Cylance'}){Add-Evidence $service.Name 'Security-product service-name heuristic.' @{State=$service.State;DisplayName=$service.DisplayName}}
         }
@@ -73,9 +73,9 @@ function Invoke-PolicyCheck {
             foreach($key in Get-RegistryChildren "$policyRoot\EventLog\EventForwarding\SubscriptionManager"){Add-Evidence $key.PSPath 'Event forwarding policy subkey.'}
         }
         118 {
-            try{Add-Evidence 'Secure Boot' 'UEFI Secure Boot runtime state.' @{Enabled=(Confirm-SecureBootUEFI -ErrorAction Stop)}}catch{Set-CheckPartial 'Secure Boot state unavailable (permissions or unsupported firmware).'}
-            try{Add-Evidence 'TPM' 'TPM state.' (Get-Tpm -ErrorAction Stop|Select-Object TpmPresent,TpmReady,TpmEnabled,TpmActivated,ManufacturerIdTxt,ManufacturerVersion)}catch{Set-CheckPartial 'TPM query unavailable.'}
-            try{foreach($v in Get-BitLockerVolume -ErrorAction Stop){Add-Evidence $v.MountPoint 'BitLocker volume state; recovery material omitted.' ($v|Select-Object MountPoint,VolumeStatus,ProtectionStatus,EncryptionMethod,EncryptionPercentage)}}catch{Set-CheckPartial 'BitLocker state unavailable.'}
+            try{Add-Evidence 'Secure Boot' 'UEFI Secure Boot runtime state.' @{Enabled=(Confirm-SecureBootUEFI -ErrorAction Stop)}}catch{Set-CheckPartial 'Secure Boot state unavailable (permissions or unsupported firmware).' -ErrorRecord $_}
+            try{Add-Evidence 'TPM' 'TPM state.' (Get-Tpm -ErrorAction Stop|Select-Object TpmPresent,TpmReady,TpmEnabled,TpmActivated,ManufacturerIdTxt,ManufacturerVersion)}catch{Set-CheckPartial 'TPM query unavailable.' -ErrorRecord $_}
+            try{foreach($v in Get-BitLockerVolume -ErrorAction Stop){Add-Evidence $v.MountPoint 'BitLocker volume state; recovery material omitted.' ($v|Select-Object MountPoint,VolumeStatus,ProtectionStatus,EncryptionMethod,EncryptionPercentage)}}catch{Set-CheckPartial 'BitLocker state unavailable.' -ErrorRecord $_}
         }
         119 {
             foreach($base in @('HKCU:\Software\Policies\Microsoft\Office\16.0','HKLM:\Software\Policies\Microsoft\Office\16.0','HKCU:\Software\Microsoft\Office\16.0')){foreach($app in @('Word','Excel','PowerPoint')){

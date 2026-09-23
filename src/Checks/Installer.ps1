@@ -26,7 +26,7 @@ function Invoke-InstallerCheck {
                 try{
                     $sequenceView=$database.OpenView('SELECT `Action`, `Condition`, `Sequence` FROM `InstallExecuteSequence`');$sequenceView.Execute()
                     while($null-ne($sequenceRow=$sequenceView.Fetch())){try{$sequence[$sequenceRow.StringData(1)]=@{Condition=$sequenceRow.StringData(2);Sequence=$sequenceRow.IntegerData(3)}}finally{[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($sequenceRow);$sequenceRow=$null}}
-                }catch{Set-CheckPartial 'An MSI execute sequence could not be inspected.'}
+                }catch{Set-CheckPartial 'An MSI execute sequence could not be inspected.' -ErrorRecord $_}
                 finally{if($sequenceRow){[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($sequenceRow)};if($sequenceView){$sequenceView.Close();[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($sequenceView)}}
                 $view=$database.OpenView('SELECT `Action`, `Type`, `Source`, `Target` FROM `CustomAction`');$view.Execute()
                 $count=0
@@ -42,7 +42,7 @@ function Invoke-InstallerCheck {
                         }
                     }finally{[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($record);$record=$null}
                 }
-            }catch{Set-CheckPartial 'Some MSI databases lack a CustomAction table or could not be read.'}
+            }catch{Set-CheckPartial 'Some MSI databases lack a CustomAction table or could not be read.' -ErrorRecord $_}
             finally{if($record){[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($record)};if($view){$view.Close();[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($view)};if($database){[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($database)}}
         }
     }finally{[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($installer)}

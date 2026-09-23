@@ -37,12 +37,12 @@ function Invoke-ArtifactCheck {
             Add-Evidence "$path\DefaultPassword" 'Auto-logon password registry exposure check; no LSA secret extraction.' @{State=$password.State;Value=$(if($password.State-eq'Present'){'[REDACTED]'})} $(if($password.State-eq'Present' -and $password.Value){'High'}else{'Information'}) 'Remove plaintext auto-logon credentials and rotate confirmed exposed passwords.'
         }
         69 { foreach($file in Get-BoundedFiles @("$env:ProgramData\Microsoft\Group Policy\History","$env:SystemRoot\System32\GroupPolicy") -Depth 8 -Pattern '\.xml$'){Find-SecretMarkers $file.FullName} }
-        70 { $computer=Get-CimInstance Win32_ComputerSystem -ErrorAction Stop;if(-not$computer.PartOfDomain){Set-CheckSkipped 'Computer is not domain joined.';return};foreach($file in Get-BoundedFiles @("\\$($computer.Domain)\SYSVOL\$($computer.Domain)\Policies") -Depth 8 -Pattern '\.xml$'){Find-SecretMarkers $file.FullName} }
+        70 { $computer=Get-CimInstance Win32_ComputerSystem -ErrorAction Stop;if(-not$computer.PartOfDomain){Set-CheckSkipped 'Computer is not domain joined.' -SkipReason DomainNotJoined;return};foreach($file in Get-BoundedFiles @("\\$($computer.Domain)\SYSVOL\$($computer.Domain)\Policies") -Depth 8 -Pattern '\.xml$'){Find-SecretMarkers $file.FullName} }
         71 {
             foreach($base in @("$env:SystemRoot\System32\config","$env:SystemRoot\System32\config\RegBack","$env:SystemDrive\Windows.old\Windows\System32\config")){foreach($name in @('SAM','SYSTEM','SECURITY')){
                 $path=Join-Path $base $name
                 try{$stream=[IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,([IO.FileShare]::ReadWrite-bor[IO.FileShare]::Delete));$stream.Dispose();Add-Evidence $path 'Registry hive can be opened for reading; no contents collected.' @{Readable=$true;ElevatedToken=$script:Context.Elevated} $(if($script:Context.Elevated){'Information'}else{'High'})}
-                catch [IO.FileNotFoundException]{}catch [IO.DirectoryNotFoundException]{}catch [UnauthorizedAccessException]{Add-Evidence $path 'Read access denied.' @{Readable=$false}}catch{Set-CheckPartial "Hive readability unknown (locked or inaccessible): $path"}
+                catch [IO.FileNotFoundException]{}catch [IO.DirectoryNotFoundException]{}catch [UnauthorizedAccessException]{Add-Evidence $path 'Read access denied.' @{Readable=$false}}catch{Set-CheckPartial "Hive readability unknown (locked or inaccessible): $path" -ErrorRecord $_}
             }}
         }
         72 { Add-Evidence 'Credential Manager' 'Saved credential metadata only; passwords are not requested.' @{Inventory=(Invoke-ReadOnlyCommand "$env:SystemRoot\System32\cmdkey.exe" '/list')} }
@@ -55,15 +55,15 @@ function Invoke-ArtifactCheck {
                     $events=@(Get-WinEvent -FilterHashtable @{LogName=$log;Id=$ids} -MaxEvents $script:Context.MaxItems -ErrorAction Stop)
                     foreach($event in $events){if($event.ToXml()-match'(?i)(password|passwd|pwd|api[_-]?key|client[_-]?secret|access[_-]?token)\s*["'']?\s*[:=]'){Add-Evidence "$log/$($event.RecordId)" 'Possible secret assignment in event data; contents omitted.' @{Id=$event.Id;TimeCreated=$event.TimeCreated;Values='[REDACTED]'} 'Medium'}}
                     if($events.Count-eq$script:Context.MaxItems){Set-CheckPartial 'Event limit reached; only the newest matching events were inspected.'}
-                }catch{Set-CheckPartial "Log unavailable or no matching records: $log"}
+                }catch{Set-CheckPartial "Log unavailable or no matching records: $log" -ErrorRecord $_}
             }
         }
         80 {
             foreach($root in @('HKCU:\Software','HKLM:\SOFTWARE')){foreach($key in Get-Limited @(Get-RegistryChildren $root)){
-                try{foreach($name in $key.GetValueNames()){if($name-match'(?i)password|passwd|secret|token|credential'){Add-Evidence "$($key.Name)/$name" 'Sensitive registry-value name; value omitted.' @{Value='[REDACTED]'} 'Low'}}}catch{Set-CheckPartial 'Some registry value names were inaccessible.'}
+                try{foreach($name in $key.GetValueNames()){if($name-match'(?i)password|passwd|secret|token|credential'){Add-Evidence "$($key.Name)/$name" 'Sensitive registry-value name; value omitted.' @{Value='[REDACTED]'} 'Low'}}}catch{Set-CheckPartial 'Some registry value names were inaccessible.' -ErrorRecord $_}
             }}
         }
-        83 { foreach($class in @('CCM_NetworkAccessAccount')){try{foreach($item in Get-CimInstance -Namespace root\ccm\policy\Machine\ActualConfig -ClassName $class -ErrorAction Stop){Add-Evidence $class 'SCCM Network Access Account policy object is readable; encrypted fields not collected.' @{Present=$true;Decrypted=$false} 'Low'}}catch{Set-CheckPartial 'SCCM policy namespace absent or inaccessible.'}} }
+        83 { foreach($class in @('CCM_NetworkAccessAccount')){try{foreach($item in Get-CimInstance -Namespace root\ccm\policy\Machine\ActualConfig -ClassName $class -ErrorAction Stop){Add-Evidence $class 'SCCM Network Access Account policy object is readable; encrypted fields not collected.' @{Present=$true;Decrypted=$false} 'Low'}}catch{Set-CheckPartial 'SCCM policy namespace absent or inaccessible.' -ErrorRecord $_}} }
         84 { foreach($file in Get-BoundedFiles @("$env:SystemRoot\ccmcache") -Depth 3 -Pattern '\.(xml|ini|config|ps1|bat|cmd|txt|json|yml|yaml)$'){Add-Artifact $file.FullName 'SCCM cache' -Inspect} }
         87 { foreach($key in @('HKLM:\SOFTWARE\RealVNC\vncserver','HKLM:\SOFTWARE\TightVNC\Server','HKLM:\SOFTWARE\TigerVNC\WinVNC4')){Add-RegistryEvidence $key @('Password','PasswordViewOnly')};foreach($file in @("${env:ProgramFiles}\uvnc bvba\UltraVNC\ultravnc.ini","${env:ProgramFiles(x86)}\uvnc bvba\UltraVNC\ultravnc.ini")){Add-Artifact $file 'VNC configuration' -Inspect} }
         94 {
@@ -75,7 +75,7 @@ function Invoke-ArtifactCheck {
                 if($file.Length-gt$script:Context.MaxFileBytes){Set-CheckPartial 'Wi-Fi profile exceeded file size limit.';continue}
                 try{$xml=Read-SafeXml $file.FullName;$auth=$xml.SelectSingleNode('//*[local-name()="authentication"]');$key=$xml.SelectSingleNode('//*[local-name()="keyMaterial"]');$validate=$xml.SelectNodes('//*[local-name()="PerformServerValidation" or local-name()="DisableUserPromptForServerValidation"]');
                     Add-Evidence $file.FullName 'Wi-Fi profile security metadata; network names and key material omitted.' @{Authentication=$(if($auth){$auth.InnerText});KeyMaterialPresent=($null-ne$key);KeyMaterial='[REDACTED]';ValidationSettings=@($validate|ForEach-Object{@{Name=$_.LocalName;Value=$_.InnerText}})}
-                }catch{Set-CheckPartial 'A Wi-Fi profile could not be parsed.'}
+                }catch{Set-CheckPartial 'A Wi-Fi profile could not be parsed.' -ErrorRecord $_}
             }
         }
         97 { $value=Get-Clipboard -Raw -ErrorAction Stop;Add-Evidence 'Clipboard' 'Clipboard inspected for secret markers; contents omitted.' @{NonEmpty=(-not[string]::IsNullOrEmpty($value));SecretMarker=([string]$value-match'(?i)password|api[_-]?key|access[_-]?token|BEGIN .*PRIVATE KEY');Value='[REDACTED]'} }

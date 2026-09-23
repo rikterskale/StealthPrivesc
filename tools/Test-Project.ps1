@@ -3,14 +3,15 @@
 param()
 
 $ErrorActionPreference = 'Stop'
+$testNames = @('Test-StealthPrivesc.ps1', 'Test-ExtendedChecks.ps1', 'Test-Diagnostics.ps1')
 
 if ($env:OS -ne 'Windows_NT') {
-    Write-Host 'Project validation requires Windows because the supported test matrix includes Windows PowerShell 5.1 and Windows native checks.'
+    Write-Host "NOT RUN: all $($testNames.Count * 2) test-suite/runtime combinations. These tests require Windows APIs and Windows PowerShell 5.1."
+    Write-Host 'Next action: run tools/Test-Project.ps1 on 64-bit Windows with Windows PowerShell 5.1 and PowerShell 7 installed. This is incomplete validation, not a pass.'
     exit 2
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$testNames = @('Test-StealthPrivesc.ps1', 'Test-ExtendedChecks.ps1')
 $results = New-Object 'System.Collections.Generic.List[object]'
 $runtimes = New-Object 'System.Collections.Generic.List[object]'
 
@@ -24,7 +25,7 @@ function Add-Runtime {
     if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         Write-Host "MISSING: $Name was not found."
         foreach ($testName in $testNames) {
-            $results.Add([pscustomobject]@{ Runtime = $Name; Test = $testName; Status = 'FAIL'; Detail = 'Required runtime is missing.' })
+            $results.Add([pscustomobject]@{ Runtime = $Name; Test = $testName; Status = 'NOT RUN'; Detail = 'Required runtime is missing.'; Action = "Install or enable 64-bit $Name, ensure it can be found, then rerun tools/Test-Project.ps1." })
         }
         return
     }
@@ -49,7 +50,7 @@ function Add-Runtime {
     if ($probeExitCode -ne 0 -or -not $versionMatches -or -not $is64Bit) {
         Write-Host "INVALID: $Name resolved to version $version, 64-bit=$is64Bit. Expected PowerShell $ExpectedVersion, 64-bit."
         foreach ($testName in $testNames) {
-            $results.Add([pscustomobject]@{ Runtime = $Name; Test = $testName; Status = 'FAIL'; Detail = 'Runtime version or architecture did not match the supported matrix.' })
+            $results.Add([pscustomobject]@{ Runtime = $Name; Test = $testName; Status = 'NOT RUN'; Detail = 'Runtime could not start or its version/architecture did not match.'; Action = "Verify $Name starts normally and is the expected 64-bit version. Correct its installation/PATH, then rerun tools/Test-Project.ps1." })
         }
         return
     }
@@ -102,16 +103,16 @@ try {
                 & $runtime.Path -NoLogo -NoProfile -NonInteractive -File $testPath
                 $exitCode = $LASTEXITCODE
                 if ($exitCode -eq 0) {
-                    $results.Add([pscustomobject]@{ Runtime = $runtime.Name; Test = $testName; Status = 'PASS'; Detail = 'Process exited 0.' })
+                    $results.Add([pscustomobject]@{ Runtime = $runtime.Name; Test = $testName; Status = 'PASS'; Detail = 'Process exited 0.'; Action = '' })
                     Write-Host "PASS: $($runtime.Name) $testName"
                 }
                 else {
-                    $results.Add([pscustomobject]@{ Runtime = $runtime.Name; Test = $testName; Status = 'FAIL'; Detail = "Process exited $exitCode." })
+                    $results.Add([pscustomobject]@{ Runtime = $runtime.Name; Test = $testName; Status = 'FAIL'; Detail = "Process exited $exitCode; later assertions in this suite may not have run."; Action = 'Resolve the first reported error, then rerun tools/Test-Project.ps1. DPAPI/profile errors require a normal logged-in Windows session with the user profile loaded.' })
                     Write-Host "FAIL: $($runtime.Name) $testName (exit $exitCode)"
                 }
             }
             catch {
-                $results.Add([pscustomobject]@{ Runtime = $runtime.Name; Test = $testName; Status = 'FAIL'; Detail = $_.Exception.Message })
+                $results.Add([pscustomobject]@{ Runtime = $runtime.Name; Test = $testName; Status = 'FAIL'; Detail = $_.Exception.Message; Action = 'Verify the test script and runtime are readable and can execute, then rerun tools/Test-Project.ps1.' })
                 Write-Host "FAIL: $($runtime.Name) $testName ($($_.Exception.GetType().Name))"
             }
         }
@@ -127,12 +128,15 @@ finally {
 
 Write-Host ''
 Write-Host 'Validation summary:'
-$results | Format-Table Runtime, Test, Status, Detail -AutoSize | Out-Host
+$results | Format-Table Runtime, Test, Status, Detail -AutoSize -Wrap | Out-Host
+$notRun = @($results | Where-Object Status -eq 'NOT RUN')
+Write-Host "Test suites not run: $($notRun.Count) of $($results.Count) required runtime/suite combinations."
 $failures = @($results | Where-Object Status -ne 'PASS')
 if ($failures.Count) {
+    foreach ($result in $failures) { Write-Host "$($result.Status): $($result.Runtime) / $($result.Test). $($result.Detail) Next action: $($result.Action)" }
     Write-Host "Validation failed: $($failures.Count) required check(s) did not pass."
     exit 1
 }
 
-Write-Host 'Validation passed: all required test scripts passed under both supported PowerShell editions.'
+Write-Host 'Validation passed: all required test scripts passed under both supported PowerShell editions; no test groups were skipped.'
 exit 0

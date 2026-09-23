@@ -26,6 +26,6 @@ function Invoke-PackageRiskCheck {
             foreach($entry in @($response.vulnerabilities)){$cve=$entry.cve;Add-Evidence $app.Name 'NVD package/version keyword advisory candidate; CPE applicability requires validation and this is not a confirmed vulnerability.' @{Version=$app.Version;Cve=$cve.id;Published=$cve.published;LastModified=$cve.lastModified;Source=('https://nvd.nist.gov/vuln/detail/'+$cve.id)} 'Low'}
             Add-Evidence $app.Name 'Public advisory lookup completed; no keyword match does not establish absence of vulnerabilities.' @{Returned=@($response.vulnerabilities).Count;Total=$response.totalResults}
             if($response.totalResults-gt20){Set-CheckPartial 'NVD candidate results exceeded the per-package result cap.'}
-        }catch{Set-CheckPartial 'Public advisory request failed or was rate-limited.';break}
+        }catch{Set-CheckPartial 'Public advisory request failed or was rate-limited.' -ErrorRecord $_;break}
     }
 }

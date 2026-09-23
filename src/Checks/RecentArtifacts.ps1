@@ -14,6 +14,6 @@ function Invoke-RecentArtifactCheck {
     foreach($drive in Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' -ErrorAction Stop){foreach($file in Get-BoundedFiles @($drive.DeviceID+'\$Recycle.Bin') -Depth 1 -Pattern '^\$I'){
         if($file.Length-gt$script:Context.MaxFileBytes-or$file.Length-lt24){continue}
         try{$bytes=[IO.File]::ReadAllBytes($file.FullName);$version=[BitConverter]::ToInt64($bytes,0);$size=[BitConverter]::ToInt64($bytes,8);$deleted=[DateTime]::FromFileTimeUtc([BitConverter]::ToInt64($bytes,16));$offset=if($version-eq2){28}else{24};if($version-notin@(1,2)-or$bytes.Length-lt$offset){Set-CheckPartial 'Unsupported Recycle Bin metadata format.';continue};$path=[Text.Encoding]::Unicode.GetString($bytes,$offset,$bytes.Length-$offset).TrimEnd([char]0);Add-Evidence $file.FullName 'Recycle Bin metadata record; deleted file contents not read.' @{OriginalPath=$path;OriginalBytes=$size;DeletedUtc=$deleted;FormatVersion=$version}}
-        catch{Set-CheckPartial 'Recycle Bin metadata record unreadable or malformed.'}
+        catch{Set-CheckPartial 'Recycle Bin metadata record unreadable or malformed.' -ErrorRecord $_}
     }}
 }

@@ -37,6 +37,15 @@ Enable checks that query domain resources and directory services.
 Enable checks that inspect credential or browser/activity exposure. Reported
 values remain redacted.
 
+.PARAMETER OutputDirectory
+Save timestamped JSON and HTML reports and a troubleshooting log. The log is
+updated during the scan and includes explanations, suggested fixes and safe
+technical details. Use -Verbose to also display all diagnostics and check timing.
+
+.PARAMETER PassThru
+Return the report object, including Checks.Diagnostics and run-level Diagnostics.
+Warnings are written separately from the returned object.
+
 .EXAMPLE
 .\Invoke-StealthPrivesc.ps1 -Category Identity
 Runs the 10 identity checks.
@@ -78,7 +87,12 @@ param(
     [string]$OutputDirectory,
     [switch]$PassThru
 )
-Import-Module (Join-Path $PSScriptRoot 'src/StealthPrivesc.psd1') -Force -ErrorAction Stop
+try {
+    Import-Module (Join-Path $PSScriptRoot 'src/StealthPrivesc.psd1') -Force -ErrorAction Stop
+} catch {
+    $message = "StealthPrivesc could not load its module ($($_.Exception.GetType().Name)). Verify that src/StealthPrivesc.psd1 and all src/Private and src/Checks files are present and readable. Use PowerShell 5.1 or later and your approved script execution process. No scan or report was created."
+    $PSCmdlet.ThrowTerminatingError([System.Management.Automation.ErrorRecord]::new([InvalidOperationException]::new($message), 'StealthPrivesc.ModuleLoadFailed', [System.Management.Automation.ErrorCategory]::ResourceUnavailable, $null))
+}
 $options = @{}
 foreach ($key in $PSBoundParameters.Keys) { $options[$key] = $PSBoundParameters[$key] }
 Invoke-StealthPrivesc @options

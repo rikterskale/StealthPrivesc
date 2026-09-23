@@ -33,7 +33,7 @@ function Get-FilePresence {
     if(-not(Test-AllowedLocalPath $Path)){return 'Unknown'}
     try{$null=Get-Item -LiteralPath $Path -Force -ErrorAction Stop;return 'Present'}
     catch [System.Management.Automation.ItemNotFoundException]{return 'Missing'}
-    catch{Set-CheckPartial "Cannot determine target existence: $Path";return 'Unknown'}
+    catch{Set-CheckPartial "Cannot determine target existence: $Path" -ErrorRecord $_;return 'Unknown'}
 }
 function Get-ImagePublisher {
     param([string]$Path)
@@ -42,14 +42,14 @@ function Get-ImagePublisher {
         $file=Get-Item -LiteralPath $Path -ErrorAction Stop
         $signature=Get-AuthenticodeSignature -LiteralPath $Path -ErrorAction Stop
         [pscustomobject]@{Company=$file.VersionInfo.CompanyName;Product=$file.VersionInfo.ProductName;Version=$file.VersionInfo.FileVersion;SignatureStatus=[string]$signature.Status;Signer=$(if($signature.SignerCertificate){$signature.SignerCertificate.Subject});MicrosoftSigned=($signature.Status-eq'Valid'-and$signature.SignerCertificate.Subject-match'(^|, )O=Microsoft Corporation(,|$)')}
-    }catch{Set-CheckPartial 'Some executable publisher/signature metadata is unavailable.';$null}
+    }catch{Set-CheckPartial 'Some executable publisher/signature metadata is unavailable.' -ErrorRecord $_;$null}
 }
 function Add-LoadedModuleAccess {
     param([int]$ProcessId,[string]$Context)
     try{
         $process=Get-Process -Id $ProcessId -ErrorAction Stop
         foreach($module in Get-Limited @($process.Modules)){Add-ExecutableAccess $module.FileName "$Context loaded DLL/executable."}
-    }catch{Set-CheckPartial 'Some process module lists are inaccessible or the process exited.'}
+    }catch{Set-CheckPartial 'Some process module lists are inaccessible or the process exited.' -ErrorRecord $_}
 }
 function Get-DefaultDllSearchDirectories {
     param([string]$Executable)

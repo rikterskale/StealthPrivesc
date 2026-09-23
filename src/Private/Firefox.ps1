@@ -19,5 +19,5 @@ $results=[StealthPrivesc.NativeNss]::Inspect($p.Library,[IO.Path]::GetDirectoryN
 '@
     $code=$code.Replace('__PAYLOAD__',$encodedPayload);$encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code))
     try{$result=Invoke-ReadOnlyCommand "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" "-NoProfile -NonInteractive -EncodedCommand $encoded"|ConvertFrom-Json;if($result.Truncated){Set-CheckPartial 'Firefox recovery probe reached MaxItems.'};return @($result.Items)}
-    catch{Set-CheckPartial 'Firefox read-only recovery probe failed (architecture, primary password, profile or NSS access); no passwords were requested interactively.';return @()}
+    catch{Set-CheckPartial 'Firefox read-only recovery probe failed (architecture, primary password, profile or NSS access); no passwords were requested interactively.' -ErrorRecord $_;return @()}
 }

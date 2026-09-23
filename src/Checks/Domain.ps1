@@ -1,14 +1,14 @@
 function Invoke-DomainCheck {
     param([int]$Id)
     $computer=Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
-    if(-not $computer.PartOfDomain){Set-CheckSkipped 'Computer is not joined to an Active Directory domain.';return}
-    if(-not(Get-Module -ListAvailable ActiveDirectory)){Set-CheckSkipped 'Requires the Windows RSAT ActiveDirectory module.';return}
+    if(-not $computer.PartOfDomain){Set-CheckSkipped 'Computer is not joined to an Active Directory domain.' -SkipReason DomainNotJoined;return}
+    if(-not(Get-Module -ListAvailable ActiveDirectory)){Set-CheckSkipped 'Requires the Windows RSAT ActiveDirectory module.' -SkipReason ActiveDirectoryModuleMissing;return}
     Import-Module ActiveDirectory -ErrorAction Stop
     $domain=Get-ADDomain -ErrorAction Stop
     switch($Id){
         141 {
             $applied=@()
-            try{$applied=@(Get-CimInstance -Namespace root\RSOP\Computer -ClassName RSOP_GPO -ErrorAction Stop)}catch{Set-CheckPartial 'Computer RSoP data unavailable; current applied GPOs cannot be confirmed.'}
+            try{$applied=@(Get-CimInstance -Namespace root\RSOP\Computer -ClassName RSOP_GPO -ErrorAction Stop)}catch{Set-CheckPartial 'Computer RSoP data unavailable; current applied GPOs cannot be confirmed.' -ErrorRecord $_}
             foreach($entry in Get-Limited $applied){
                 $guid=[regex]::Match([string]$entry.guidName,'\{[0-9a-fA-F-]{36}\}').Value
                 if(-not$guid){continue}
@@ -25,10 +25,10 @@ function Invoke-DomainCheck {
             foreach($attribute in @('ms-Mcs-AdmPwd','msLAPS-Password','msLAPS-EncryptedPassword')){
                 try{$object=Get-ADComputer -Identity $env:COMPUTERNAME -Properties $attribute -ErrorAction Stop;$property=$object.PSObject.Properties[$attribute];$present=($null-ne$property -and $null-ne$property.Value -and @($property.Value).Count-gt0 -and -not($property.Value-is[string]-and[string]::IsNullOrEmpty($property.Value)))
                     Add-Evidence $object.DistinguishedName 'Current computer LAPS attribute readability; value discarded.' @{Attribute=$attribute;ReturnedValue=$present;Value='[REDACTED]';Encrypted=($attribute-eq'msLAPS-EncryptedPassword')} $(if($present -and $attribute-ne'msLAPS-EncryptedPassword'){'Medium'}else{'Information'})
-                }catch{Set-CheckPartial "LAPS attribute unavailable, schema absent or access denied: $attribute"}
+                }catch{Set-CheckPartial "LAPS attribute unavailable, schema absent or access denied: $attribute" -ErrorRecord $_}
             }
         }
-        143 {foreach($account in Get-Limited @(Get-ADServiceAccount -Filter * -Properties PrincipalsAllowedToRetrieveManagedPassword -ResultSetSize ($script:Context.MaxItems+1) -ErrorAction Stop)){Add-Evidence $account.DistinguishedName 'gMSA retrieval authorization relationships.' @{Name=$account.Name;Principals=@($account.PrincipalsAllowedToRetrieveManagedPassword|ForEach-Object{[string]$_})};if($script:Context.IncludeSensitive){$blob=$null;try{$value=Get-ADServiceAccount -Identity $account.DistinguishedName -Properties 'msDS-ManagedPassword' -ErrorAction Stop;$blob=$value.'msDS-ManagedPassword';Add-Evidence $account.DistinguishedName 'gMSA managed-password material readability; bytes erased after checking presence.' @{Returned=($null-ne$blob-and$blob.Length-gt0);Value='[REDACTED]'} $(if($blob){'Medium'}else{'Information'})}catch{Set-CheckPartial 'Some gMSA password attributes could not be queried.'}finally{if($blob-is[byte[]]){[Array]::Clear($blob,0,$blob.Length)}}}}}
+        143 {foreach($account in Get-Limited @(Get-ADServiceAccount -Filter * -Properties PrincipalsAllowedToRetrieveManagedPassword -ResultSetSize ($script:Context.MaxItems+1) -ErrorAction Stop)){Add-Evidence $account.DistinguishedName 'gMSA retrieval authorization relationships.' @{Name=$account.Name;Principals=@($account.PrincipalsAllowedToRetrieveManagedPassword|ForEach-Object{[string]$_})};if($script:Context.IncludeSensitive){$blob=$null;try{$value=Get-ADServiceAccount -Identity $account.DistinguishedName -Properties 'msDS-ManagedPassword' -ErrorAction Stop;$blob=$value.'msDS-ManagedPassword';Add-Evidence $account.DistinguishedName 'gMSA managed-password material readability; bytes erased after checking presence.' @{Returned=($null-ne$blob-and$blob.Length-gt0);Value='[REDACTED]'} $(if($blob){'Medium'}else{'Information'})}catch{Set-CheckPartial 'Some gMSA password attributes could not be queried.' -ErrorRecord $_}finally{if($blob-is[byte[]]){[Array]::Clear($blob,0,$blob.Length)}}}}}
         144 {foreach($object in Get-Limited @(Get-ADObject -LDAPFilter '(|(objectClass=user)(objectClass=group)(objectClass=computer))' -Properties nTSecurityDescriptor,objectSid -ResultSetSize ($script:Context.MaxItems+1) -ErrorAction Stop)){Add-ADControlEvidence $object}}
         145 {foreach($account in Get-ADUser -LDAPFilter '(&(servicePrincipalName=*)(!(objectClass=computer)))' -Properties ServicePrincipalName,msDS-SupportedEncryptionTypes,PasswordLastSet,PasswordNeverExpires,Enabled -ResultSetSize $script:Context.MaxItems -ErrorAction Stop){Add-Evidence $account.DistinguishedName 'User account with SPNs; ticket requests are not performed.' @{Name=$account.Name;SPNs=@($account.ServicePrincipalName);EncryptionTypes=$account.'msDS-SupportedEncryptionTypes';PasswordLastSet=$account.PasswordLastSet;PasswordNeverExpires=$account.PasswordNeverExpires;Enabled=$account.Enabled} 'Low'}}
         146 {

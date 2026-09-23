@@ -17,7 +17,7 @@ Set-Location .\StealthPrivesc
 .\Invoke-StealthPrivesc.ps1 -OutputDirectory .\reports
 ```
 
-This selects the full catalog and writes timestamped JSON and standalone HTML reports to `reports`. Checks requiring an opt-in are identified in the report; the default run does not enable domain, network, or sensitive checks.
+This selects the full catalog and writes timestamped JSON and standalone HTML reports plus a troubleshooting `.log` file to `reports`. Checks requiring an opt-in are identified in the report; the default run does not enable domain, network, or sensitive checks.
 
 If your organization blocks script execution, follow its approved signing and execution process.
 
@@ -62,9 +62,80 @@ $report.Checks | Select-Object Id,Status,Findings,Limitations
 | `Completed` | The collector completed within its declared scope; this is not a security verdict. |
 | `Partial` | Access, data, format, dependency, or enumeration limits affected the check. |
 | `Skipped` | A required opt-in or applicable environment was absent. |
+| `Unsupported` | This scanner version does not implement the check; a switch or permission change cannot enable it. |
 | `Error` | The collector failed; other checks continue. |
 
 A finding is evidence to review, not automatically a vulnerability or confirmed escalation path. Check its `Observation`, `Evidence`, `Remediation`, and scope notes. Missing findings do not prove a system is safe.
+
+### See which checks were skipped and make them run
+
+Every skipped check now prints its reason and next steps without needing `-Verbose`, including when using `-PassThru`. The end-of-run console count, HTML **Skipped checks** section, JSON `SkippedChecks` list, and troubleshooting log make these omissions visible. Only checks selected for this run are counted; checks excluded by your `-Category` or `-CheckId` filter were not requested.
+
+| Why the check was skipped | How to run it |
+| --- | --- |
+| Domain scope was off | Add `-IncludeDomain`. Domain checks also need the relevant domain environment and permissions. |
+| Network scope was off | Add `-IncludeNetwork` to permit the network query. |
+| Sensitive scope was off | Add `-IncludeSensitive` to permit credential/activity inspection; report values remain redacted. |
+| Computer is not domain joined | Run from an existing domain-joined assessment computer connected to the domain network or VPN. A scan switch cannot turn a standalone computer into a domain member. |
+| ActiveDirectory module is missing | Have the Windows RSAT Active Directory PowerShell tools installed, then verify `Get-Module -ListAvailable ActiveDirectory` lists the module and `Import-Module ActiveDirectory -ErrorAction Stop` succeeds. |
+| Windows API is unavailable on this OS | Use a supported Windows version satisfying the minimum version in the skip message. There is no switch that supplies a missing OS API. |
+
+Each skipped check includes a retry selector with its required opt-in and any scope switches already enabled. For example, if check 70 was skipped because domain scope was off:
+
+```powershell
+.\Invoke-StealthPrivesc.ps1 -CheckId 70 -IncludeDomain -OutputDirectory .\reports -Verbose
+```
+
+After rerunning, verify `Status` is `Completed`. If it is still `Skipped`, resolve the next reported prerequisite. `Partial` means some collection remains incomplete, and `Error` means it ran but failed; follow those diagnostics. No command can guarantee completion on a system that lacks the required environment. The scanner reports these requirements and does not enable scopes, install tools, or join a domain automatically.
+
+```powershell
+$report = .\Invoke-StealthPrivesc.ps1 -Category DomainCloud -PassThru
+$report.SkippedChecks | Format-List CheckId,Title,Reason,Explanation,SuggestedActions,RetryCommand,Verification
+```
+
+### Troubleshoot an incomplete or failed check
+
+Errors and runtime limitations now explain **what happened**, **what it means**, and **what to try next**. The console displays every skip/unsupported reason plus up to three other diagnostics per check, including a selector for retrying that check. Use `-Verbose` to see every diagnostic and check start/finish messages:
+
+```powershell
+.\Invoke-StealthPrivesc.ps1 -Category Services -OutputDirectory .\reports -Verbose
+```
+
+Open the HTML report for readable next steps and expandable technical details. The matching `assessment-*.log` is written as diagnostics occur, so entries already written remain available if scanning is interrupted before final report export. Without `-OutputDirectory`, diagnostics are available in the console and through `-PassThru`, but are not automatically saved. The log is diagnostic history, not a full console transcript.
+
+| Diagnostic | Suggested response |
+| --- | --- |
+| `AccessDenied` | Verify the scanning account and required read permissions. Use an approved elevated session only when administrative inventory is intended; elevation changes the access being assessed. |
+| `DependencyUnavailable` | Verify the required command, module, or Windows feature. Domain checks may need the ActiveDirectory module/RSAT. |
+| `CommandTimeout` | Check whether the resource responds, then consider `-CommandTimeoutSeconds 60` for the affected helper. |
+| `CommandFailed` | Inspect the reported exit code and source location; verify the helper's dependencies, permissions, and input. |
+| `ItemLimit` / `FileSizeLimit` | Narrow the scan or adjust `-MaxItems` / `-MaxFileBytes`. Fixed collector limits still apply. |
+| `ScopeNotEnabled` | Add the named opt-in switch only if that scope is intended. This is an intentional exclusion. |
+| `ResourceUnavailable` / `CollectionIncomplete` | The cause is uncertain. Review the resource and technical details before changing permissions or configuration. |
+
+Inspect diagnostics programmatically:
+
+```powershell
+$report = .\Invoke-StealthPrivesc.ps1 -Category Services -PassThru
+$report.Checks | Where-Object Status -in Error,Partial |
+    ForEach-Object { $_.Diagnostics } |
+    Format-List CheckId,Code,Summary,Explanation,SuggestedActions,RetryCommand,TechnicalDetails
+```
+
+Technical details include exception types, error category, HRESULT/native codes, helper exit code or timeout, and source file/line when available. Raw exception messages, arbitrary error IDs, source text, command arguments, and helper stdout/stderr are not copied into diagnostics because they can contain secrets. Resource paths, account names, and hostnames may still appear in reports. Suggested fixes are guidance; the scanner does not apply them automatically.
+
+Individual check failures let the remaining checks continue. Startup and report-export failures terminate the run with recovery guidance. When the module has initialized, the terminating error retains the report collected so far:
+
+```powershell
+try {
+    $report = .\Invoke-StealthPrivesc.ps1 -Category Services -OutputDirectory .\reports -PassThru
+} catch {
+    $report = $_.Exception.Data['AssessmentReport']
+    if ($report) { $report.Diagnostics | Format-List * }
+}
+```
+
+Use `RunStatus` and run-level `Diagnostics` to detect runner failures, and `Summary` / per-check `Status` for collection failures. A failed export may leave only a JSON report or troubleshooting log. A module-load or output-directory initialization failure may prevent any report file from being created.
 
 ## Scope and permissions
 
@@ -325,15 +396,19 @@ On 64-bit Windows, with both 64-bit PowerShell 7 and Windows PowerShell 5.1 inst
 .\tools\Test-Project.ps1
 ```
 
-The runner checks the runtime versions and architectures, then runs both test scripts under each edition. It exits with code `0` only when all four invocations pass; a missing or unsupported runtime, or any failed test, produces a nonzero exit code. Run it as a user with a loaded Windows profile: the DPAPI fixtures can fail under sandbox or service tokens without a loaded profile. Test fixtures use a uniquely named temporary directory inside the repository and the runner removes it when finished.
+The runner checks the runtime versions and architectures, then runs all three test scripts under each edition. It exits with code `0` only when all six invocations pass. Its summary explicitly counts suites that did not run; missing or unusable runtimes produce `NOT RUN` rows with a reason and repair action, plus a nonzero exit code. Each passing suite reports zero skipped test groups. Running the tests on a non-Windows platform reports `NOT RUN` and exits nonzero instead of silently omitting Windows test groups.
+
+Run validation as a user with a loaded Windows profile: DPAPI fixtures can fail under sandbox or service tokens without a loaded profile. A failed suite may stop before its later assertions; fix the first failure and rerun the matrix. Test fixtures use a uniquely named temporary directory inside the repository and the runner removes it when finished. Scanner checks intentionally marked `Skipped` inside gating tests are expected outcomes being asserted, not omitted automated tests.
 
 To run one test script manually under a single edition:
 
 ```powershell
 pwsh -NoProfile -File .\tests\Test-StealthPrivesc.ps1
 pwsh -NoProfile -File .\tests\Test-ExtendedChecks.ps1
+pwsh -NoProfile -File .\tests\Test-Diagnostics.ps1
 powershell.exe -NoProfile -File .\tests\Test-StealthPrivesc.ps1
 powershell.exe -NoProfile -File .\tests\Test-ExtendedChecks.ps1
+powershell.exe -NoProfile -File .\tests\Test-Diagnostics.ps1
 ```
 
 Tests cover synthetic DPAPI/AES-GCM secrets, deny/object-specific ACLs, exact patch/hash matching, kernel-vs-user CI rules, read-only SQLite, decompression bounds, redaction, CLI gating and report encoding. DPAPI fixtures require a loaded user profile and fail under some sandbox tokens. Live sensitive stores, every product and every AD/AD CS topology have not been validated in a representative lab.

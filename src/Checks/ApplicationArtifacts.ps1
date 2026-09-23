@@ -15,7 +15,7 @@ function Add-StructuredArtifact {
     if($file.Length-gt$script:Context.MaxFileBytes){Set-CheckPartial 'Application configuration exceeds MaxFileBytes.';return}
     if($file.Extension-in@('.xml','.config','.rdg','.settings')){
         try{foreach($indicator in Get-StructuredSecretIndicators (Read-SafeXml $Path)){Add-Evidence $Path "$Kind credential field detected; values discarded." $indicator 'Medium'}}
-        catch{Set-CheckPartial 'Application XML could not be parsed.'}
+        catch{Set-CheckPartial 'Application XML could not be parsed.' -ErrorRecord $_}
     }
     Find-SecretMarkers $Path
 }
@@ -24,12 +24,12 @@ function Invoke-ApplicationArtifactCheck {
     switch($Id){
         71 {
             Invoke-ArtifactCheck 71
-            try{foreach($shadow in Get-Limited @(Get-CimInstance Win32_ShadowCopy -ErrorAction Stop)){foreach($name in @('SAM','SYSTEM','SECURITY')){Add-ReadableArtifact ($shadow.DeviceObject+'\Windows\System32\config\'+$name) 'Shadow-copy hive readability; contents are not copied.'}}}catch{Set-CheckPartial 'Shadow-copy enumeration unavailable.'}
+            try{foreach($shadow in Get-Limited @(Get-CimInstance Win32_ShadowCopy -ErrorAction Stop)){foreach($name in @('SAM','SYSTEM','SECURITY')){Add-ReadableArtifact ($shadow.DeviceObject+'\Windows\System32\config\'+$name) 'Shadow-copy hive readability; contents are not copied.'}}}catch{Set-CheckPartial 'Shadow-copy enumeration unavailable.' -ErrorRecord $_}
         }
         80 {
             foreach($key in Get-RegistryTree @('HKCU:\Software','HKLM:\SOFTWARE')){
                 try{foreach($name in $key.GetValueNames()){$value=$key.GetValue($name,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames);$nameMarker=$name-match'(?i)password|passwd|secret|token|credential';$contentMarker=$value-is[string]-and$value-match'(?i)(password|passwd|pwd|secret|token|api[_-]?key)\s*["'']?\s*[:=]|BEGIN .*PRIVATE KEY';if($nameMarker-or$contentMarker){Add-Evidence ($key.Name+'/'+$name) 'Possible credential registry field or embedded assignment.' @{NameMarker=$nameMarker;ContentMarker=$contentMarker;NonEmpty=($null-ne$value-and[string]$value-ne'');Value='[REDACTED]'} 'Low'}}}
-                catch{Set-CheckPartial 'Some registry fields were unreadable.'}
+                catch{Set-CheckPartial 'Some registry fields were unreadable.' -ErrorRecord $_}
             }
         }
         81 {
@@ -40,7 +40,7 @@ function Invoke-ApplicationArtifactCheck {
                     Add-Type -Path $assembly -ErrorAction Stop;$manager=New-Object Microsoft.Web.Administration.ServerManager
                     foreach($pool in Get-Limited @($manager.ApplicationPools)){$model=$pool.ProcessModel;$present=-not[string]::IsNullOrEmpty($model.Password);Add-Evidence $pool.Name 'IIS application-pool process-model credentials queried in the current context; password discarded.' @{IdentityType=[string]$model.IdentityType;UserNamePresent=(-not[string]::IsNullOrEmpty($model.UserName));PasswordReturned=$present;Value='[REDACTED]'} $(if($present){'High'}else{'Information'})}
                     foreach($site in Get-Limited @($manager.Sites)){foreach($app in $site.Applications){foreach($directory in $app.VirtualDirectories){$path=[Environment]::ExpandEnvironmentVariables($directory.PhysicalPath);Add-StructuredArtifact (Join-Path $path 'web.config') 'IIS site configuration';$present=-not[string]::IsNullOrEmpty($directory.Password);Add-Evidence ($site.Name+$directory.Path) 'IIS virtual-directory credential accessibility.' @{PasswordReturned=$present;Value='[REDACTED]'} $(if($present){'High'}else{'Information'})}}}
-                }catch{Set-CheckPartial 'IIS configuration API inaccessible or protected fields could not be decrypted.'}finally{if($manager){$manager.Dispose()}}
+                }catch{Set-CheckPartial 'IIS configuration API inaccessible or protected fields could not be decrypted.' -ErrorRecord $_}finally{if($manager){$manager.Dispose()}}
             }
             foreach($path in @("$env:SystemRoot\System32\inetsrv\config\applicationHost.config","$env:SystemDrive\inetpub\wwwroot\web.config")){Add-StructuredArtifact $path 'IIS configuration'}
         }
@@ -49,12 +49,12 @@ function Invoke-ApplicationArtifactCheck {
             foreach($root in @("${env:ProgramFiles}\Altiris\Altiris Agent\Client Policies","${env:ProgramFiles(x86)}\Altiris\Altiris Agent\Client Policies","$env:ProgramData\Symantec\Symantec Agent")){
                 foreach($file in Get-BoundedFiles @($root) -Depth 3 -Pattern '\.xml$'){
                     if($file.Length-gt$script:Context.MaxFileBytes){Set-CheckPartial 'Symantec policy exceeded MaxFileBytes.';continue}
-                    try{$xml=Read-SafeXml $file.FullName;$nodes=@($xml.SelectNodes('//*[local-name()="PkgAccessCredentials"]'));foreach($node in $nodes){Add-Evidence $file.FullName 'Symantec Account Connectivity Credentials policy reference.' @{CredentialNodePresent=$true;SecureStorageReference=($node.OuterXml-match'aexs://');Values='[REDACTED]'} 'Medium'}}catch{Set-CheckPartial 'Symantec client policy XML could not be parsed.'}
+                    try{$xml=Read-SafeXml $file.FullName;$nodes=@($xml.SelectNodes('//*[local-name()="PkgAccessCredentials"]'));foreach($node in $nodes){Add-Evidence $file.FullName 'Symantec Account Connectivity Credentials policy reference.' @{CredentialNodePresent=$true;SecureStorageReference=($node.OuterXml-match'aexs://');Values='[REDACTED]'} 'Medium'}}catch{Set-CheckPartial 'Symantec client policy XML could not be parsed.' -ErrorRecord $_}
                 }
             }
         }
         86 {
-            try{$events=@(Get-WinEvent -FilterHashtable @{LogName='Operations Manager';Id=@(7026,7002)} -MaxEvents ($script:Context.MaxItems+1) -ErrorAction Stop);foreach($event in Get-Limited $events){Add-Evidence "Operations Manager/$($event.RecordId)" 'SCOM Run As account logon trace indicates configured credentials; event payload is redacted.' @{Id=$event.Id;TimeCreated=$event.TimeCreated;SuccessfulLogon=($event.Id-eq7026);Payload='[REDACTED]'} 'Low'}}catch{Set-CheckPartial 'SCOM log absent, inaccessible, or contains no matching Run As events.'}
+            try{$events=@(Get-WinEvent -FilterHashtable @{LogName='Operations Manager';Id=@(7026,7002)} -MaxEvents ($script:Context.MaxItems+1) -ErrorAction Stop);foreach($event in Get-Limited $events){Add-Evidence "Operations Manager/$($event.RecordId)" 'SCOM Run As account logon trace indicates configured credentials; event payload is redacted.' @{Id=$event.Id;TimeCreated=$event.TimeCreated;SuccessfulLogon=($event.Id-eq7026);Payload='[REDACTED]'} 'Low'}}catch{Set-CheckPartial 'SCOM log absent, inaccessible, or contains no matching Run As events.' -ErrorRecord $_}
         }
         {$_-in@(82,88,89,90,91,92,93)} {
             foreach($profile in Get-ProfileRoots){

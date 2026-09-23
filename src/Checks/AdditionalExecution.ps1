@@ -21,7 +21,7 @@ function Invoke-AdditionalExecutionCheck {
         foreach($file in Get-BoundedFiles (Get-SearchRoots) -Depth 5 -Pattern '\.(config|xml|wsdl|cs|vb)$'){
             if($file.Length-gt$script:Context.MaxFileBytes){Set-CheckPartial 'SOAP configuration/source exceeds MaxFileBytes.';continue}
             try{$text=[IO.File]::ReadAllText($file.FullName);$client=$text-match'(?i)SoapHttpClientProtocol|HttpWebClientProtocol|ServiceDescriptionImporter|WebReference';$url=$text-match'(?i)file://|\\\\[^\\\s]+\\';$defaultCredentials=$text-match'(?i)(UseDefaultCredentials\s*=\s*true|CredentialCache\.DefaultCredentials)';if($client){Add-Evidence $file.FullName 'SOAP HTTP-client proxy/WSDL surface; unsafe URI schemes and default-credential use are independent risk markers. Untrusted input reachability requires application analysis.' @{ClientProxyMarker=$client;FileOrUNCUri=$url;DefaultCredentials=$defaultCredentials;Values='[REDACTED]';Source='https://labs.watchtowr.com/soapwn-pwning-net-framework-applications-through-http-client-proxies-and-wsdl/'} $(if($url-or$defaultCredentials){'Medium'}else{'Low'});Add-WritablePath $file.FullName 'Writable SOAP proxy configuration/source candidate.'}}
-            catch{Set-CheckPartial 'SOAP configuration/source could not be inspected.'}
+            catch{Set-CheckPartial 'SOAP configuration/source could not be inspected.' -ErrorRecord $_}
         }
     }
 }

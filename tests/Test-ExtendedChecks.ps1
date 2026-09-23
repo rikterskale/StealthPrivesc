@@ -1,5 +1,9 @@
 #requires -Version 5.1
 $ErrorActionPreference='Stop'
+if ($env:OS -ne 'Windows_NT') {
+    Write-Host 'NOT RUN: Test-ExtendedChecks requires Windows for SQLite, DPAPI, ACL and native API tests. Run tools/Test-Project.ps1 on 64-bit Windows with PowerShell 5.1 and 7 and a loaded user profile. This suite did not pass.'
+    exit 2
+}
 Import-Module (Join-Path $PSScriptRoot '../src/StealthPrivesc.psd1') -Force
 & (Get-Module StealthPrivesc) {
     $script:ExtendedAssertions=0
@@ -126,7 +130,7 @@ Import-Module (Join-Path $PSScriptRoot '../src/StealthPrivesc.psd1') -Force
             $missing=[StealthPrivesc.NativeObjects]::Security('\StealthPrivescMissing-'+[Guid]::NewGuid().ToString('N'),$true)
             Assert ($missing.Status-ne0-and$null-eq$missing.Descriptor) 'Missing native objects return errors, not a permissive descriptor.'
         }
-        Write-Host "PASS: $script:ExtendedAssertions extended assertions."
+        Write-Host "PASS: $script:ExtendedAssertions extended assertions; skipped test groups: 0."
     }finally{
         $resolved=[IO.Path]::GetFullPath($testRoot)
         $tempBase=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar

@@ -8,7 +8,7 @@ function Invoke-CredentialStoreCheck {
             if($result.Status-ge2147483648){Set-CheckPartial 'SSPI probe did not complete under the current token/policy.'}
         }
         73 {
-            if([Environment]::OSVersion.Version-lt[version]'6.2'){Set-CheckSkipped 'Vault collector requires Windows 8 / Server 2012 or newer.';return}
+            if([Environment]::OSVersion.Version-lt[version]'6.2'){Set-CheckSkipped 'Vault collector requires Windows 8 / Server 2012 or newer.' -SkipReason UnsupportedPlatform;return}
             if(-not('StealthPrivesc.NativeVault'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'NativeVault.cs') -ErrorAction Stop}
             $result=[StealthPrivesc.NativeVault]::Inspect($script:Context.MaxItems)
             foreach($item in $result.Items){
@@ -54,7 +54,7 @@ function Get-ProfileRoots {
     Get-Cached 'ProfileRoots' {
         $env:USERPROFILE
         try{foreach($profile in Get-CimInstance Win32_UserProfile -ErrorAction Stop){if($profile.LocalPath-ne$env:USERPROFILE-and-not$profile.Special){$profile.LocalPath}}}
-        catch{Set-CheckPartial 'Additional user profiles could not be enumerated; current-user paths are still inspected.'}
+        catch{Set-CheckPartial 'Additional user profiles could not be enumerated; current-user paths are still inspected.' -ErrorRecord $_}
     }
 }
 function Add-ReadableArtifact {
@@ -68,5 +68,5 @@ function Add-ReadableArtifact {
         Add-Evidence $file.FullName $Kind @{Readable=$true;Bytes=$file.Length;LastWriteUtc=$file.LastWriteTimeUtc.ToString('o');Value='[REDACTED]'} 'Low'
     }catch [System.Management.Automation.ItemNotFoundException]{}
     catch [UnauthorizedAccessException]{Add-Evidence $Path 'Artifact read access denied.' @{Readable=$false}}
-    catch{Set-CheckPartial "Artifact readability could not be established: $Path"}
+    catch{Set-CheckPartial "Artifact readability could not be established: $Path" -ErrorRecord $_}
 }

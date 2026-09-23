@@ -16,6 +16,6 @@ function Invoke-SearchIndexCheck {
             $records.MoveNext();$count++
         }
         if($count-ge$script:Context.MaxItems){Set-CheckPartial 'Search Index query reached MaxItems.'}
-    }catch{Set-CheckPartial 'Windows Search Index provider is unavailable or inaccessible.'}
+    }catch{Set-CheckPartial 'Windows Search Index provider is unavailable or inaccessible.' -ErrorRecord $_}
     finally{if($records){if($records.State-ne0){$records.Close()};[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($records)};if($connection){if($connection.State-ne0){$connection.Close()};[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($connection)}}
 }

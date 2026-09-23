@@ -10,7 +10,7 @@ function Get-ReferenceDocument {
         Add-Evidence $file.FullName "$Kind reference snapshot." @{Source=$document.Source;RetrievedUtc=$document.RetrievedUtc;Entries=@($document.Entries).Count;SHA256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash}
         if(([DateTimeOffset]::UtcNow-$retrieved).TotalDays-gt30){Set-CheckPartial "$Kind reference data is older than 30 days."}
         return $document
-    }catch{Set-CheckPartial "$Kind reference data is missing or invalid. Run tools/Update-ReferenceData.ps1 or supply a validated reference path.";return $null}
+    }catch{Set-CheckPartial "$Kind reference data is missing or invalid. Run tools/Update-ReferenceData.ps1 or supply a validated reference path." -ErrorRecord $_;return $null}
 }
 function Get-WindowsVersionContext {
     $os=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
@@ -74,7 +74,7 @@ function Get-DriverHashMatches {
     foreach($driver in $Drivers){
         if(-not(Test-AllowedLocalPath $driver.Path)){continue}
         try{$hash=(Get-FileHash -LiteralPath $driver.Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()}
-        catch{Set-CheckPartial 'Some installed driver images could not be hashed.';continue}
+        catch{Set-CheckPartial 'Some installed driver images could not be hashed.' -ErrorRecord $_;continue}
         if($index.ContainsKey($hash)){foreach($entry in $index[$hash]){[pscustomobject]@{Name=$driver.Name;Path=$driver.Path;State=$driver.State;SHA256=$hash;ReferenceId=$entry.Id;Category=$entry.Category;Resources=$entry.Resources}}}
     }
 }
