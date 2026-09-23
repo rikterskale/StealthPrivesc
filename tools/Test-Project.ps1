@@ -1,9 +1,10 @@
 #requires -Version 5.1
 [CmdletBinding()]
-param()
+param([string]$ResultsDirectory)
 
 $ErrorActionPreference = 'Stop'
-$testNames = @('Test-StealthPrivesc.ps1', 'Test-ExtendedChecks.ps1', 'Test-Diagnostics.ps1', 'Test-Verification.ps1', 'Test-AttackPaths.ps1')
+$testNames = @('Test-Sources.ps1', 'Test-StealthPrivesc.ps1', 'Test-ExtendedChecks.ps1', 'Test-Diagnostics.ps1', 'Test-Verification.ps1', 'Test-AttackPaths.ps1')
+$startedUtc = [DateTime]::UtcNow.ToString('o')
 
 if ($env:OS -ne 'Windows_NT') {
     Write-Host "NOT RUN: all $($testNames.Count * 2) test-suite/runtime combinations. These tests require Windows APIs and Windows PowerShell 5.1."
@@ -99,6 +100,7 @@ try {
         foreach ($testName in $testNames) {
             $testPath = Join-Path $PSScriptRoot "../tests/$testName"
             Write-Host "RUN: $($runtime.Name) $testName"
+            $timer = [Diagnostics.Stopwatch]::StartNew()
             try {
                 & $runtime.Path -NoLogo -NoProfile -NonInteractive -File $testPath
                 $exitCode = $LASTEXITCODE
@@ -114,6 +116,10 @@ try {
             catch {
                 $results.Add([pscustomobject]@{ Runtime = $runtime.Name; Test = $testName; Status = 'FAIL'; Detail = $_.Exception.Message; Action = 'Verify the test script and runtime are readable and can execute, then rerun tools/Test-Project.ps1.' })
                 Write-Host "FAIL: $($runtime.Name) $testName ($($_.Exception.GetType().Name))"
+            }
+            finally {
+                $timer.Stop()
+                $results[$results.Count - 1] | Add-Member -NotePropertyName DurationSeconds -NotePropertyValue ([Math]::Round($timer.Elapsed.TotalSeconds, 3))
             }
         }
     }
@@ -132,6 +138,29 @@ $results | Format-Table Runtime, Test, Status, Detail -AutoSize -Wrap | Out-Host
 $notRun = @($results | Where-Object Status -eq 'NOT RUN')
 Write-Host "Test suites not run: $($notRun.Count) of $($results.Count) required runtime/suite combinations."
 $failures = @($results | Where-Object Status -ne 'PASS')
+if ($ResultsDirectory) {
+    [void][IO.Directory]::CreateDirectory($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ResultsDirectory))
+    foreach ($result in $results) {
+        $runtime = $runtimes | Where-Object Name -eq $result.Runtime | Select-Object -First 1
+        $command = if ($runtime) {
+            "& '" + $runtime.Path.Replace("'", "''") + "' -NoLogo -NoProfile -NonInteractive -File '" + (Join-Path $repoRoot "tests/$($result.Test)").Replace("'", "''") + "'"
+        } else { $null }
+        $result | Add-Member -NotePropertyName Command -NotePropertyValue $command
+    }
+    $summary = [ordered]@{
+        SchemaVersion = '1.0'
+        StartedUtc = $startedUtc
+        FinishedUtc = [DateTime]::UtcNow.ToString('o')
+        OperatingSystem = [Environment]::OSVersion.VersionString
+        Expected = $testNames.Count * 2
+        Passed = @($results | Where-Object Status -eq 'PASS').Count
+        Failed = @($results | Where-Object Status -eq 'FAIL').Count
+        NotRun = $notRun.Count
+        Runtimes = @($runtimes.ToArray())
+        Results = @($results.ToArray())
+    }
+    $summary | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $ResultsDirectory 'validation.json') -Encoding UTF8
+}
 if ($failures.Count) {
     foreach ($result in $failures) { Write-Host "$($result.Status): $($result.Runtime) / $($result.Test). $($result.Detail) Next action: $($result.Action)" }
     Write-Host "Validation failed: $($failures.Count) required check(s) did not pass."

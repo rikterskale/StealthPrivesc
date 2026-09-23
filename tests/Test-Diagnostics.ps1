@@ -147,7 +147,7 @@ Import-Module (Join-Path $PSScriptRoot '../src/StealthPrivesc.psd1') -Force
             Assert-Diagnostic ($fatal -and $fatal.Exception.Data['AssessmentReport'].Diagnostics[0].Phase -eq 'Initialization') 'Initialization failures retain the failing stage.'
             $startupReport = Get-Content (Get-ChildItem $startupOutput -Filter '*.json').FullName -Raw | ConvertFrom-Json
             Assert-Diagnostic ($startupReport.RunStatus -eq 'Failed' -and $startupReport.Checks.Count -eq 0) 'Initialized output saves a failed-startup report.'
-            foreach ($relativePath in @('../tools/Test-Project.ps1','../tests/Test-StealthPrivesc.ps1','../tests/Test-ExtendedChecks.ps1','../tests/Test-Diagnostics.ps1')) {
+            foreach ($relativePath in @('../tools/Test-Project.ps1','../tests/Test-Sources.ps1','../tests/Test-StealthPrivesc.ps1','../tests/Test-ExtendedChecks.ps1','../tests/Test-Diagnostics.ps1','../tests/Test-Verification.ps1','../tests/Test-AttackPaths.ps1')) {
                 $guardPath = Join-Path $script:ModuleRoot $relativePath
                 $guard = Invoke-DiagnosticTestProcess ('-NoLogo -NoProfile -NonInteractive -OutputFormat Text -File "' + $guardPath + '"')
                 Assert-Diagnostic ($guard.ExitCode -eq 2 -and $guard.Output -match 'NOT RUN:' -and $guard.Output -match 'tools/Test-Project.ps1') "Unsupported-platform test invocation reports its omission and rerun action: $relativePath."
@@ -158,11 +158,15 @@ Import-Module (Join-Path $PSScriptRoot '../src/StealthPrivesc.psd1') -Force
         # parent environment variables are changed, and no test suite is launched.
         $missingRoot = (Join-Path $testRoot 'missing-runtime').Replace("'", "''")
         $runnerPath = (Join-Path $script:ModuleRoot '../tools/Test-Project.ps1').Replace("'", "''")
-        $missingRuntimeCode = '$env:PATH=""; $env:ProgramFiles=''' + $missingRoot + '''; $env:ProgramW6432=''' + $missingRoot + '''; $env:WINDIR=''' + $missingRoot + '''; & ''' + $runnerPath + ''''
+        $missingResults = Join-Path $testRoot 'missing-results'
+        $missingRuntimeCode = '$env:PATH=""; $env:ProgramFiles=''' + $missingRoot + '''; $env:ProgramW6432=''' + $missingRoot + '''; $env:WINDIR=''' + $missingRoot + '''; & ''' + $runnerPath + ''' -ResultsDirectory ''' + $missingResults.Replace("'", "''") + ''''
         $encodedMissingRuntime = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($missingRuntimeCode))
         $missingRuntime = Invoke-DiagnosticTestProcess "-NoLogo -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand $encodedMissingRuntime"
-        Assert-Diagnostic ($missingRuntime.ExitCode -eq 1 -and $missingRuntime.Output -match 'Test suites not run: 10 of 10') 'Missing runtimes report every unrun suite and fail validation.'
+        Assert-Diagnostic ($missingRuntime.ExitCode -eq 1 -and $missingRuntime.Output -match 'Test suites not run: 12 of 12') 'Missing runtimes report every unrun suite and fail validation.'
         Assert-Diagnostic ($missingRuntime.Output -match 'Next action: Install or enable 64-bit' -and $missingRuntime.Output -notmatch 'Validation passed:') 'Missing-runtime output provides a fix instead of a misleading pass.'
+        $missingSummary = Get-Content -LiteralPath (Join-Path $missingResults 'validation.json') -Raw | ConvertFrom-Json
+        Assert-Diagnostic ($missingSummary.Expected -eq 12 -and $missingSummary.NotRun -eq 12 -and $missingSummary.Passed -eq 0 -and $missingSummary.Results.Count -eq 12) 'Machine-readable CI results count every missing runtime/suite combination.'
+        Assert-Diagnostic (@($missingSummary.Results | Where-Object { $_.Status -ne 'NOT RUN' -or $_.Command }).Count -eq 0) 'Missing runtimes never claim an executed command or a passing result.'
 
         $verboseStream = @(Invoke-StealthPrivesc -CheckId 1,2 -PassThru -Verbose 4>&1 3>$null)
         $verboseText = ($verboseStream | Where-Object { $_ -is [System.Management.Automation.VerboseRecord] }) | Out-String

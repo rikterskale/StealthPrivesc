@@ -1,6 +1,14 @@
+function Initialize-WifiNativeType {
+    if ('StealthPrivesc.NativeWifi' -as [type]) { return }
+    $options = @{ Path = (Join-Path $script:ModuleRoot 'NativeWifi.cs'); ErrorAction = 'Stop' }
+    # Windows PowerShell's compiler does not reference System.Xml by default.
+    if ($PSVersionTable.PSEdition -eq 'Desktop') { $options.ReferencedAssemblies = @('System.Xml.dll') }
+    Add-Type @options
+}
+
 function Invoke-WifiCheck {
     param([int]$Id)
-    if(-not('StealthPrivesc.NativeWifi'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'NativeWifi.cs')}
+    Initialize-WifiNativeType
     $result=[StealthPrivesc.NativeWifi]::Inspect($script:Context.MaxItems,($Id-eq95))
     if($result.Status){Set-CheckPartial "WLAN API unavailable (status $($result.Status))."}
     foreach($item in $result.Items){

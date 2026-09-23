@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 8 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workflows:
+    name: Workflow validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate workflow syntax and expressions
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            --output "$RUNNER_TEMP/actionlint.tar.gz"
+          printf '%s  %s\n' \
+            '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' \
+            "$RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color
+
+  windows:
+    name: Tests (${{ matrix.os }}, PowerShell 5.1 + 7)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run complete validation matrix
+        run: |
+          New-Item -ItemType Directory -Path TestResults/ci -Force | Out-Null
+          "Commit: $env:GITHUB_SHA; runner image: $env:ImageOS $env:ImageVersion" | Tee-Object -FilePath TestResults/ci/validation.log
+          & pwsh -NoLogo -NoProfile -NonInteractive -File ./tools/Test-Project.ps1 -ResultsDirectory ./TestResults/ci 2>&1 |
+            Tee-Object -FilePath TestResults/ci/validation.log -Append
+          if ($LASTEXITCODE -ne 0) { throw "Validation exited $LASTEXITCODE. See validation.log for details." }
+      - name: Publish validation summary
+        if: always()
+        run: |
+          $resultPath = 'TestResults/ci/validation.json'
+          if (-not (Test-Path -LiteralPath $resultPath)) {
+            'Validation did not produce a summary. Inspect the job log for the startup error or timeout.' >> $env:GITHUB_STEP_SUMMARY
+            throw 'Missing validation summary.'
+          }
+          $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+          "Passed: $($result.Passed) / $($result.Expected); failed: $($result.Failed); not run: $($result.NotRun)." >> $env:GITHUB_STEP_SUMMARY
+          '' >> $env:GITHUB_STEP_SUMMARY
+          '| Runtime | Suite | Status | Seconds |' >> $env:GITHUB_STEP_SUMMARY
+          '| --- | --- | --- | ---: |' >> $env:GITHUB_STEP_SUMMARY
+          foreach ($row in $result.Results) {
+            "| $($row.Runtime) | $($row.Test) | $($row.Status) | $($row.DurationSeconds) |" >> $env:GITHUB_STEP_SUMMARY
+          }
+          if ($result.Passed -ne $result.Expected -or $result.Results.Count -ne $result.Expected -or $result.Failed -ne 0 -or $result.NotRun -ne 0) {
+            throw 'The complete validation matrix did not pass.'
+          }
+      - name: Upload validation logs and commands
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: validation-${{ matrix.os }}
+          path: |
+            TestResults/ci/validation.log
+            TestResults/ci/validation.json
+          if-no-files-found: error
+          retention-days: 14
+
+  ci:
+    name: CI
+    if: always()
+    needs: [workflows, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every validation job to pass
+        env:
+          WORKFLOWS_RESULT: ${{ needs.workflows.result }}
+          WINDOWS_RESULT: ${{ needs.windows.result }}
+        shell: bash
+        run: |
+          if [[ "$WORKFLOWS_RESULT" != 'success' || "$WINDOWS_RESULT" != 'success' ]]; then
+            printf 'Required jobs did not pass: workflows=%s windows=%s\n' "$WORKFLOWS_RESULT" "$WINDOWS_RESULT"
+            exit 1
+          fi
