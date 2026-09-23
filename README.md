@@ -73,6 +73,16 @@ File/registry/object checks use Windows access evaluation. AD checks use object-
 
 ## Validate
 
+On 64-bit Windows, with both 64-bit PowerShell 7 and Windows PowerShell 5.1 installed, run the complete local test matrix from the repository root. The runner finds `pwsh.exe` on `PATH` or in its standard Program Files location:
+
+```powershell
+.\tools\Test-Project.ps1
+```
+
+The runner checks the runtime versions and architectures, then runs both test scripts under each edition. It exits with code `0` only when all four invocations pass; a missing or unsupported runtime, or any failed test, produces a nonzero exit code. Run it as a user with a loaded Windows profile: the DPAPI fixtures can fail under sandbox or service tokens without a loaded profile. Test fixtures use a uniquely named temporary directory inside the repository and the runner removes it when finished.
+
+To run one test script manually under a single edition:
+
 ```powershell
 pwsh -NoProfile -File .\tests\Test-StealthPrivesc.ps1
 pwsh -NoProfile -File .\tests\Test-ExtendedChecks.ps1
