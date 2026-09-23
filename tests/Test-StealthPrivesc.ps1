@@ -113,10 +113,12 @@ $module=Get-Module StealthPrivesc
         Assert-True ($items.Count-le10-and$script:Current.Status-eq'Partial') 'Traversal must bound items and disclose truncation.'
         Reset-TestContext
         Add-Evidence '<script>alert(1)</script>' 'test' @{Value='[REDACTED]'}
-        $report=@{Notice='test';Computer='fixture';User='fixture';Elevated=$false;StartedUtc='now';Checks=@([pscustomobject]@{Id=1;Title='test';Status='Completed';Coverage='Implemented';Limitations=@();Findings=$script:Current.Findings})}
+        $report=@{Notice='test';Computer='fixture';User='fixture';Elevated=$false;StartedUtc='now';Summary=[ordered]@{Completed=1;Partial=0;Skipped=0;Unsupported=0;Error=0};Checks=@([pscustomobject]@{Id=1;Title='test';Status='Completed';Coverage='Implemented';Limitations=@();Findings=$script:Current.Findings})}
         Export-Assessment $report $testRoot
         $html=Get-Content (Get-ChildItem $testRoot -Filter '*.html').FullName -Raw
         Assert-True ($html-notmatch'<script>'-and$html-match'&lt;script&gt;') 'HTML report must escape hostile evidence.'
+        Assert-True (($html-match'<section aria-labelledby="status-summary">')-and$html-match'<th scope="col">Status</th>'-and$html-match'<tr><th scope="row">Completed</th><td>1</td></tr>'-and$html-match'<tr><th scope="row">Error</th><td>0</td></tr>') 'HTML report must show semantic aggregate status counts.'
+        Assert-True ($html.IndexOf('<section aria-labelledby="status-summary">')-lt$html.IndexOf('<article>')) 'HTML status summary must appear before per-check details.'
         $roundtrip=Get-Content (Get-ChildItem $testRoot -Filter '*.json').FullName -Raw|ConvertFrom-Json
         Assert-True ($roundtrip.Checks[0].Findings[0].Target-eq'<script>alert(1)</script>') 'JSON must preserve structured evidence safely.'
         if($env:OS-eq'Windows_NT'){

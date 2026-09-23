@@ -218,6 +218,13 @@ function Export-Assessment {
     $html=New-Object Text.StringBuilder
     [void]$html.Append('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Windows exposure assessment</title><style>body{font:16px system-ui;max-width:1100px;margin:40px auto;padding:0 24px;background:#101820;color:#e5edf3}h1,h2{color:#82d4d4}article{border:1px solid #38505c;padding:16px;margin:16px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}small{color:#b9cbd5}.High,.Medium{border-left:4px solid #ffbd69}summary{cursor:pointer}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #38505c}</style><h1>Windows exposure assessment</h1>')
     [void]$html.Append('<p>'+[Net.WebUtility]::HtmlEncode($Report.Notice)+'</p><p>'+[Net.WebUtility]::HtmlEncode("$($Report.Computer) | $($Report.User) | Elevated: $($Report.Elevated) | $($Report.StartedUtc)")+'</p>')
+    [void]$html.Append('<section aria-labelledby="status-summary"><h2 id="status-summary">Check status summary</h2><table><thead><tr><th scope="col">Status</th><th scope="col">Count</th></tr></thead><tbody>')
+    foreach($status in @('Completed','Partial','Skipped','Unsupported','Error')){
+        $count=$Report.Summary[$status]
+        if($null-eq$count){$count=0}
+        [void]$html.Append('<tr><th scope="row">'+[Net.WebUtility]::HtmlEncode($status)+'</th><td>'+[Net.WebUtility]::HtmlEncode([string]$count)+'</td></tr>')
+    }
+    [void]$html.Append('</tbody></table></section>')
     foreach($check in $Report.Checks){
         [void]$html.Append('<article><h2>'+[Net.WebUtility]::HtmlEncode("$($check.Id). $($check.Title)")+'</h2><p>'+[Net.WebUtility]::HtmlEncode("$($check.Status) / $($check.Coverage) | $($check.Findings.Count) evidence items")+'</p>')
         foreach($limitation in $check.Limitations){[void]$html.Append('<p><small>'+[Net.WebUtility]::HtmlEncode($limitation)+'</small></p>')}
