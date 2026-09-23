@@ -66,6 +66,8 @@ $report.Checks | Select-Object Id,Status,Findings,Limitations
 
 This catalog shows every check ID and its full title, grouped by the exact `-Category` value accepted by the script.
 
+For underlying Windows commands/APIs and per-check positive-result examples, see the companion [check reference](docs/CHECK-REFERENCE.md).
+
 ##### AccessControl
 
 | Check ID | Check |
