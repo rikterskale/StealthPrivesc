@@ -1,72 +1,107 @@
 # StealthPrivesc
 
-A PowerShell Windows privilege-escalation exposure scanner. Version 0.2 provides collectors for all 148 checklist IDs, with credential values redacted. Checks gather evidence without exploiting findings or changing assessed configuration.
+A read-only Windows privilege-escalation exposure scanner. It gathers evidence without exploiting findings or changing the assessed configuration. Sensitive values are redacted from reports.
 
-See [coverage](docs/COVERAGE.md) for each collector's scope, including heuristic assessments and platform limits. Implemented does not mean every host, format or application is supported; runtime limits produce Partial results.
+## Quick start
 
-## Supported platforms
+On **64-bit Windows 11 or Windows Server 2019/2022/2025**, use **Windows PowerShell 5.1 or PowerShell 7**. First, clone the project if needed; then run the scan from the repository folder:
 
-The intended client targets are 64-bit Windows 11 versions 24H2, 25H2 and 26H1, using Home, Pro, Enterprise or Education. Windows 10 is outside the supported-platform scope. The intended server targets are 64-bit Windows Server 2019, 2022 and 2025, using Standard or Datacenter. Other Windows editions, ARM64, Windows Server Essentials and Azure Edition are not in the stated support scope.
-
-Use a Windows 11 version and edition that is still receiving Microsoft security updates. Windows 11 servicing dates differ by edition; version 26H1 is intended for new devices and is not offered as an in-place update from 24H2 or 25H2. Windows Server support follows each release's Microsoft lifecycle. These platform targets describe intended compatibility, not certification on every edition or release. The automated test matrix below checks both PowerShell editions on the test host; it does not provide a separate OS-version test run for every target. See Microsoft's [Windows 11 release information](https://learn.microsoft.com/en-us/windows/release-health/windows11-release-information) and [Windows Server release information](https://learn.microsoft.com/en-us/windows/release-health/windows-server-release-info) for current servicing details.
-
-## License
-
-Project-authored material is licensed under the [MIT License](LICENSE). Third-party components and data retain their separate terms; see [third-party notices](docs/THIRD-PARTY.md) and the accompanying license files.
-
-## Run
-
-Use 64-bit Windows PowerShell 5.1 or PowerShell 7 on a supported platform. Windows components provide local APIs; AD checks require RSAT ActiveDirectory. Firefox recovery uses a verified installed Mozilla NSS runtime.
+If you have not downloaded the project yet:
 
 ```powershell
-# Catalog only.
-.\Invoke-StealthPrivesc.ps1 -ListChecks
+git clone https://github.com/rikterskale/StealthPrivesc.git
+Set-Location .\StealthPrivesc
+```
 
-# Local baseline with JSON and standalone HTML reports.
+```powershell
 .\Invoke-StealthPrivesc.ps1 -OutputDirectory .\reports
+```
 
-# Smaller bundles by catalog category. Combine categories as needed.
-.\Invoke-StealthPrivesc.ps1 -Category Identity -OutputDirectory .\reports
+This selects the full catalog and writes timestamped JSON and standalone HTML reports to `reports`. Checks requiring an opt-in are identified in the report; the default run does not enable domain, network, or sensitive checks.
+
+If your organization blocks script execution, follow its approved signing and execution process.
+
+## Choose what to scan
+
+Each row is a complete command. These examples save JSON and HTML reports under `reports`.
+
+| I want to check… | Run this command |
+| --- | --- |
+| Current identity and token | `.\Invoke-StealthPrivesc.ps1 -Category Identity -OutputDirectory .\reports` |
+| Services, scheduled tasks, and startup paths | `.\Invoke-StealthPrivesc.ps1 -Category Services,TasksStartup -OutputDirectory .\reports` |
+| Windows hardening, patches, and driver risk | `.\Invoke-StealthPrivesc.ps1 -Category Hardening,SystemRisk -OutputDirectory .\reports` |
+| Credential exposure, including domain SYSVOL checks | `.\Invoke-StealthPrivesc.ps1 -Category CredentialExposure -IncludeSensitive -IncludeDomain -OutputDirectory .\reports` |
+| Domain and AD configuration | `.\Invoke-StealthPrivesc.ps1 -Category DomainCloud -IncludeDomain -OutputDirectory .\reports` |
+| Domain/cloud checks with network and sensitive probes | `.\Invoke-StealthPrivesc.ps1 -Category DomainCloud -IncludeDomain -IncludeNetwork -IncludeSensitive -OutputDirectory .\reports` |
+| External DNS check | `.\Invoke-StealthPrivesc.ps1 -CheckId 132 -IncludeNetwork -OutputDirectory .\reports` |
+| A hand-picked set | `.\Invoke-StealthPrivesc.ps1 -CheckId 12,13,16,23,24 -OutputDirectory .\reports` |
+
+For example, save a service and startup review:
+
+```powershell
 .\Invoke-StealthPrivesc.ps1 -Category Services,TasksStartup -OutputDirectory .\reports
-.\Invoke-StealthPrivesc.ps1 -Category Hardening,SystemRisk -OutputDirectory .\reports
+```
 
-# Focused service/task/patch/driver checks.
-.\Invoke-StealthPrivesc.ps1 -CheckId 12,13,16,17,19,23,24,54,55,59,60 `
-    -MaxItems 500 -OutputDirectory .\reports
+`-Category` combines categories. If you also provide `-CheckId`, only IDs matching both selectors run. With neither selector, the full catalog is selected. Preview the IDs and scopes before scanning:
 
-# Credential exposure indicators, always redacted.
-.\Invoke-StealthPrivesc.ps1 -CheckId 72,73,74,81,95,98 -IncludeSensitive `
-    -OutputDirectory .\reports
+```powershell
+.\Invoke-StealthPrivesc.ps1 -ListChecks -Category Services,TasksStartup
+```
 
-# Bounded AD checks.
-.\Invoke-StealthPrivesc.ps1 -CheckId 141,143,144,145,146,147 -IncludeDomain `
-    -MaxItems 100 -OutputDirectory .\reports
+## Read the results
 
-$report = .\Invoke-StealthPrivesc.ps1 -CheckId 1,4,12,47,100 -PassThru
+The console shows one row per selected check and a status summary. The output directory contains timestamped `assessment-*.json` and `assessment-*.html` files. HTML is for browsing; JSON preserves structured evidence. `-PassThru` returns the report object:
+
+```powershell
+$report = .\Invoke-StealthPrivesc.ps1 -Category Identity -PassThru
 $report.Checks | Select-Object Id,Status,Findings,Limitations
 ```
 
-### Choosing a smaller run
+| Status | Meaning |
+|---|---|
+| `Completed` | The collector completed within its declared scope; this is not a security verdict. |
+| `Partial` | Access, data, format, dependency, or enumeration limits affected the check. |
+| `Skipped` | A required opt-in or applicable environment was absent. |
+| `Error` | The collector failed; other checks continue. |
 
-`-Category` takes one or more of these exact names. Supplying multiple categories runs the checks from all of them:
+A finding is evidence to review, not automatically a vulnerability or confirmed escalation path. Check its `Observation`, `Evidence`, `Remediation`, and scope notes. Missing findings do not prove a system is safe.
 
-| Category | Checks | What it covers |
-| --- | ---: | --- |
-| `AccessControl` | 18 | Object and resource permissions, including services and files |
-| `CredentialExposure` | 33 | Credential, browser, and user activity exposure indicators |
-| `DomainCloud` | 8 | Domain and cloud configuration checks |
-| `Hardening` | 24 | Windows security and configuration policy |
-| `Identity` | 10 | Current identity, token, users, groups, and account policy |
-| `Inventory` | 17 | Host, software, network, and related inventory |
+## Scope and permissions
+
+Run as the Windows identity whose access you want to assess. An elevated administrator can reveal additional control rights, but the script does not request elevation or change privileges.
+
+| Switch | Enables | Notes |
+|---|---|---|
+| `-IncludeSensitive` | Credential, browser, and activity checks | Values stay redacted. Some APIs may return secret material internally; buffers are cleared where possible. |
+| `-IncludeDomain` | AD, SYSVOL, and domain-controller queries | AD checks require a domain-joined host and RSAT ActiveDirectory. gMSA password-readability checks also need `-IncludeSensitive`. |
+| `-IncludeNetwork` | External DNS, NVD package lookups, and cloud metadata probes | NVD receives package names/versions, capped at ten queries per run. Metadata probes use fixed link-local endpoints. |
+
+Some checks collect local evidence while reporting a limitation for a gated portion. Network/domain opt-ins permit UNC targets; Windows may also perform implicit name or principal resolution. These switches are scope controls, not a network sandbox.
+
+Windows, WinRT, browser, IIS, and WLAN APIs can return credential material to the process; reports retain exposure indicators only. App-bound browser encryption and Firefox primary passwords are not bypassed. Cloud identity probes record accessibility and discard returned tokens without using them elsewhere. Metadata requests use fixed endpoints without proxies or redirects; AWS uses a short-lived IMDSv2 session. Pipe, device, and handle checks inspect metadata only and close opened handles. Reports can contain paths, SIDs, usernames, and hostnames.
+
+Firefox recovery requires a publisher-verified installed Mozilla NSS runtime; unsupported profiles or unavailable runtimes are reported as limited coverage.
+
+`-SearchRoot` scopes generic file searches; fixed product/service/task paths are still inspected. `-MaxItems`, `-MaxFileBytes`, and `-CommandTimeoutSeconds` bound selected work; see [design and limits](docs/DESIGN.md).
+
+## Check catalog
+
+Use the category list to choose a bundle. Expand **All check IDs** for every ID and name, or use the [detailed check reference](docs/CHECK-REFERENCE.md) for per-ID descriptions, invocation commands, underlying APIs, and positive report examples. [Coverage notes](docs/COVERAGE.md) explain collector limits.
+
+| Category | Checks | Typical focus |
+|---|---:|---|
+| `AccessControl` | 18 | Writable paths, registry/COM permissions, processes, pipes, and devices |
+| `CredentialExposure` | 33 | Credential stores, browser artifacts, and secret-bearing files |
+| `DomainCloud` | 8 | AD, AD CS, relay indicators, and cloud identity |
+| `Hardening` | 24 | Windows policy and security configuration |
+| `Identity` | 10 | Token, accounts, groups, sessions, and account policy |
+| `Inventory` | 17 | Host, software, network, and artifact inventory |
 | `Services` | 11 | Service configuration and permissions |
-| `SystemRisk` | 20 | System risk, patch, installer, driver, and vulnerability checks |
+| `SystemRisk` | 20 | Installer, patch, driver, and vulnerability checks |
 | `TasksStartup` | 7 | Scheduled tasks and startup locations |
 
-#### Check IDs by category
-
-This catalog shows every check ID and its full title, grouped by the exact `-Category` value accepted by the script.
-
-For underlying Windows commands/APIs and per-check positive-result examples, see the companion [check reference](docs/CHECK-REFERENCE.md).
+<details>
+<summary>All check IDs</summary>
 
 ##### AccessControl
 
@@ -261,49 +296,26 @@ For underlying Windows commands/APIs and per-check positive-result examples, see
 | 27 | Microsoft Recall PolicyConfiguration task exposure, combining task configuration markers with OS/build information |
 | 28 | Startup/autorun entries and writable referenced programs or directories |
 
-Use `-ListChecks` to see each check's ID, title, scope, and coverage without running it. You can preview the exact category selection with `-ListChecks -Category Services,TasksStartup`. To pick individual checks, use `-CheckId 12,13,16`. If you supply both `-Category` and `-CheckId`, the script runs only IDs that belong to one of the selected categories. With neither selector, it runs all 148 checks.
+</details>
 
-Category selection does not automatically enable scope opt-ins. Checks requiring domain, network, or sensitive access need `-IncludeDomain`, `-IncludeNetwork`, or `-IncludeSensitive`, respectively; otherwise they appear as skipped in the report. See [Opt-ins and limits](#opt-ins-and-limits) for what each switch permits. Script help is also available with `Get-Help .\\Invoke-StealthPrivesc.ps1 -Detailed`.
+## Supported platforms
 
-Use the identity whose access you want to assess. An elevated administrator's control rights are generally expected. The scanner never requests elevation, enables privileges, starts services, triggers tasks, changes policies, repairs MSI packages or sends exploitation payloads. Follow your organization's approved signing/execution process if script policy blocks execution.
+The intended client targets are 64-bit Windows 11 versions 24H2, 25H2 and 26H1, using Home, Pro, Enterprise or Education. Windows 10 is outside the supported-platform scope. The intended server targets are 64-bit Windows Server 2019, 2022 and 2025, using Standard or Datacenter. Other Windows editions, ARM64, Windows Server Essentials and Azure Edition are not in the stated support scope.
 
-## Opt-ins and limits
+Use a Windows 11 version and edition that is still receiving Microsoft security updates. Windows 11 servicing dates differ by edition; version 26H1 is intended for new devices and is not offered as an in-place update from 24H2 or 25H2. Windows Server support follows each release's Microsoft lifecycle. These platform targets describe intended compatibility, not certification on every edition or release. The automated test matrix below checks both PowerShell editions on the test host; it does not provide a separate OS-version test run for every target. See Microsoft's [Windows 11 release information](https://learn.microsoft.com/en-us/windows/release-health/windows11-release-information) and [Windows Server release information](https://learn.microsoft.com/en-us/windows/release-health/windows-server-release-info) for current servicing details.
 
-* `-IncludeSensitive` enables credential and browser/activity checks. Windows/WinRT/browser/IIS/WLAN APIs may return credentials internally; reports retain exposure indicators only. Native buffers are cleared where possible. App-bound browser encryption and Firefox primary passwords are not bypassed. The SSPI probe preserves the original challenge/security flags and exports no authentication tokens.
-* `-IncludeDomain` enables SYSVOL/AD and DC policy queries. Actual gMSA password-readability probing additionally requires `-IncludeSensitive`.
-* `-IncludeNetwork` enables external DNS, NVD package advisory queries and link-local cloud metadata probes. NVD receives package names/versions, capped at ten queries per run. Cloud token/credential accessibility additionally requires `-IncludeSensitive`; returned tokens are never used against other services. Metadata probes disable proxies/redirects; AWS uses a short-lived IMDSv2 session.
-* Either network/domain opt-in permits UNC targets. Windows APIs can perform implicit name/principal resolution; the flags are not a network sandbox.
-* `-SearchRoot` scopes generic file searches; fixed product/service/task paths are also inspected. Reparse points are skipped.
-* `-MaxItems` bounds findings and individual enumerations, not total work. `-MaxFileBytes` bounds inspected content and decompression. External/native helper processes use `-CommandTimeoutSeconds`. Pipe/device loops also have a cooperative 60-second budget. CIM/COM/LDAP calls do not all have universal timeouts.
+## Offline reference data
 
-Pipe checks connect only for metadata, using identification-level security. Device/handle checks query and close handles without writing through them. Windows may log these operations. Reports still contain paths, SIDs, usernames and hostnames.
+The scanner uses bundled, dated MSRC, LOLDrivers, and LOLBAS snapshots. It does not refresh them during a scan. Missing, invalid, or older-than-30-day references produce `Partial` results. No driver binaries or LOLBAS command payloads are included. See [third-party notices](docs/THIRD-PARTY.md) for licenses and provenance.
 
-## Offline references
-
-Dated MSRC fixed-build, LOLDrivers hash/signature and LOLBAS name/path snapshots are bundled. Scans do not refresh them automatically. Missing, invalid or older-than-30-day references produce Partial results. No driver binaries or LOLBAS command payloads are included.
+Update snapshots only when needed; the updater requires PowerShell 7 and accesses public sources:
 
 ```powershell
-# Updater requires PowerShell 7 and explicitly accesses public sources.
 pwsh .\tools\Update-ReferenceData.ps1 -Drivers -Lolbas
-pwsh .\tools\Update-ReferenceData.ps1 -WindowsUpdates `
-    -Month 2019-Apr,2019-May,2019-Jun,2019-Jul,2019-Aug,2019-Sep,2019-Oct,2019-Nov,2019-Dec,2020-Feb,2020-Mar,2020-Apr,2020-May,2020-Jun,2020-Jul,2020-Aug,2020-Sep,2025-Nov,2026-Jul,2026-Aug,2026-Sep
+pwsh .\tools\Update-ReferenceData.ps1 -WindowsUpdates -Month <comma-separated-month-list>
 ```
 
-The Windows updater replaces the snapshot with the requested months. Include historical months to retain the Watson/Recall records. `-DriverDatabasePath` and `-VulnerabilityDatabasePath` accept compatible local snapshots. Patch assessment matches exact product branch, architecture, role and revision; it does not replace Microsoft's full applicability engine.
-
-CI assessment distinguishes kernel-mode deny rules from user-mode rules and correlates runtime policy enforcement where accessible. Missing deny matches do **not** prove that Windows would load a driver. Conditional signer rules and incomplete metadata remain explicit.
-
-## Results
-
-| Status | Meaning |
-|---|---|
-| Completed | Collector completed within declared scope, not a security verdict. |
-| Partial | Access, data, format, dependency or enumeration limits affected assessment. |
-| Skipped | Required opt-in or applicable environment is absent. |
-| Error | Collector failed; earlier evidence remains. |
-| Unsupported | Reserved for unimplemented catalog entries; none remain in 0.2. |
-
-File/registry/object checks use Windows access evaluation. AD checks use object-specific AccessCheckByType. These observations do not establish execution reachability or override mandatory integrity, locks or custom loaders. NVD keyword results, SOAP markers, historical ghost-DLL rules and AD CS prerequisite combinations are candidates requiring contextual validation.
+The Windows updater replaces the snapshot with the requested months. Include historical months to retain Watson/Recall records. `-DriverDatabasePath` and `-VulnerabilityDatabasePath` accept compatible local snapshots. Patch assessment matches exact product branch, architecture, role, and revision; it is not Microsoft's full applicability engine.
 
 ## Validate
 
@@ -326,4 +338,8 @@ powershell.exe -NoProfile -File .\tests\Test-ExtendedChecks.ps1
 
 Tests cover synthetic DPAPI/AES-GCM secrets, deny/object-specific ACLs, exact patch/hash matching, kernel-vs-user CI rules, read-only SQLite, decompression bounds, redaction, CLI gating and report encoding. DPAPI fixtures require a loaded user profile and fail under some sandbox tokens. Live sensitive stores, every product and every AD/AD CS topology have not been validated in a representative lab.
 
-See [design](docs/DESIGN.md), [coverage](docs/COVERAGE.md), [sources](docs/REFERENCES.md) and [third-party notices](docs/THIRD-PARTY.md).
+## License and notices
+
+Project-authored material is licensed under the [MIT License](LICENSE). Third-party components and data retain separate terms; see [third-party notices](docs/THIRD-PARTY.md).
+
+See also [design](docs/DESIGN.md), [coverage](docs/COVERAGE.md), and [references](docs/REFERENCES.md).
