@@ -5,7 +5,7 @@
     Author = 'StealthPrivesc contributors'
     Description = 'Read-only Windows privilege escalation exposure assessment with explicit coverage and redacted evidence.'
     PowerShellVersion = '5.1'
-    FunctionsToExport = @('Invoke-StealthPrivesc', 'Get-StealthPrivescCheck')
+    FunctionsToExport = @('Invoke-StealthPrivesc', 'Get-StealthPrivescCheck', 'Get-StealthPrivescAttackPathAnalysis')
     CmdletsToExport = @()
     VariablesToExport = @()
     AliasesToExport = @()

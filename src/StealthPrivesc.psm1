@@ -38,7 +38,7 @@ function Invoke-StealthPrivesc {
     $script:RunDiagnostics = New-Object 'System.Collections.Generic.List[object]'
     $identity = $null; $paths = $null; $failure = $null; $phase = 'Selection'
     $report = [ordered]@{
-        SchemaVersion = '1.2'; ToolVersion = '0.2.0'; StartedUtc = [DateTime]::UtcNow.ToString('o')
+        SchemaVersion = '1.4'; ToolVersion = '0.2.0'; StartedUtc = [DateTime]::UtcNow.ToString('o')
         RunStatus = 'Running'; Computer = $env:COMPUTERNAME; User = $null; UserSid = $null
         Elevated = $null; ProcessArchitecture = $(if ([Environment]::Is64BitProcess) { 'x64' } else { 'x86' })
         PowerShellVersion = $PSVersionTable.PSVersion.ToString()
@@ -76,6 +76,7 @@ function Invoke-StealthPrivesc {
         foreach ($check in $catalog) {
             $timer = [Diagnostics.Stopwatch]::StartNew()
             $script:Current = [ordered]@{ Id = $check.Id; Title = $check.Title; Category = $check.Category; Coverage = $check.Coverage; Status = 'Completed'; Limitations = New-Object 'System.Collections.Generic.List[string]'; Findings = New-Object 'System.Collections.Generic.List[object]'; Diagnostics = New-Object 'System.Collections.Generic.List[object]'; DurationMs = 0 }
+            $script:Current.Verification = New-CheckVerification -Id $check.Id
             $script:RegistryVisited = 0
             if ($check.Coverage -ne 'Implemented') { $script:Current.Status = 'Partial' }
             if ($check.Limitation) { $script:Current.Limitations.Add($check.Limitation) }
@@ -112,6 +113,16 @@ function Invoke-StealthPrivesc {
         if ($identity) { $identity.Dispose() }
         Write-Progress -Activity 'Windows exposure assessment' -Completed
     }
+    try {
+        $report.AttackPathAnalysis = Get-StealthPrivescAttackPathAnalysis -Report $report
+    } catch {
+        # Correlation failure must not discard collected findings or prevent export.
+        $diagnostic = New-AssessmentDiagnostic -Reason 'Post-scan attack-path analysis failed. Original findings are retained; review them directly.' -ErrorRecord $_ -Level Warning -Phase Analysis
+        $script:RunDiagnostics.Add($diagnostic)
+        Write-DiagnosticLog $diagnostic
+        Write-Warning (Format-AssessmentDiagnostic $diagnostic) -WarningAction Continue
+        $report.AttackPathAnalysis = [pscustomobject]@{EngineVersion='1.0';Status='Error';Paths=@();TotalCandidates=0;OmittedPaths=0;RuleCoverage=@();Limitations=@('Correlation failed; no conclusion can be drawn from the empty path list. Original findings remain available.')}
+    }
     $report.FinishedUtc = [DateTime]::UtcNow.ToString('o')
     $report.Summary = [ordered]@{}
     foreach ($status in @('Completed','Partial','Skipped','Unsupported','Error')) { $report.Summary[$status] = @($report.Checks | Where-Object Status -eq $status).Count }
@@ -134,8 +145,9 @@ function Invoke-StealthPrivesc {
         $PSCmdlet.ThrowTerminatingError([System.Management.Automation.ErrorRecord]::new($exception, 'StealthPrivesc.RunFailed', [System.Management.Automation.ErrorCategory]::OperationStopped, $null))
     }
     Write-Host "Skipped checks: $($report.Summary.Skipped) of $($report.Checks.Count) selected. Unsupported: $($report.Summary.Unsupported). Review Partial and Error results for checks that ran incompletely."
+    Write-Host "Attack path candidates: $($report.AttackPathAnalysis.Paths.Count). Analysis: $($report.AttackPathAnalysis.Status). See supporting evidence and unresolved prerequisites in the report."
     if ($PassThru) { return [pscustomobject]$report }
     $report.Checks | Select-Object Id, Category, Status, @{n='Findings';e={$_.Findings.Count}}, Title | Format-Table -AutoSize
     Write-Host ('Completed: {0}; Partial: {1}; Skipped: {2}; Unsupported: {3}; Errors: {4}' -f $report.Summary.Completed,$report.Summary.Partial,$report.Summary.Skipped,$report.Summary.Unsupported,$report.Summary.Error)
 }
-Export-ModuleMember -Function Invoke-StealthPrivesc, Get-StealthPrivescCheck
+Export-ModuleMember -Function Invoke-StealthPrivesc, Get-StealthPrivescCheck, Get-StealthPrivescAttackPathAnalysis

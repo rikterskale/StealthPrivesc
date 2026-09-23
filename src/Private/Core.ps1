@@ -16,12 +16,26 @@ function Set-CheckSkipped {
 }
 function Get-Cached {
     param([string]$Key, [scriptblock]$Factory)
+    $cacheHit = $script:Context.Cache.ContainsKey($Key)
     if (-not $script:Context.Cache.ContainsKey($Key)) {
         $before=@($script:Current.Limitations)
         $diagnosticsBefore = if ($script:Current.Contains('Diagnostics')) { @($script:Current.Diagnostics | ForEach-Object { $_ }) } else { @() }
+        $commandsBefore = if ($script:Current.Contains('Verification')) { @($script:Current.Verification.Commands | ForEach-Object { $_ | Select-Object * }) } else { @() }
+        $omittedBefore = if ($script:Current.Contains('Verification')) { $script:Current.Verification.OmittedCommandCount } else { 0 }
         $data=@(& $Factory)
         $diagnostics = if ($script:Current.Contains('Diagnostics')) { @($script:Current.Diagnostics | Where-Object { $_ -notin $diagnosticsBefore }) } else { @() }
-        $script:Context.Cache[$Key] = @{Data=$data;Limitations=@($script:Current.Limitations|Where-Object{$_ -notin $before});Diagnostics=$diagnostics}
+        $commands = if ($script:Current.Contains('Verification')) { @(foreach ($entry in $script:Current.Verification.Commands) {
+            $previous = @($commandsBefore | Where-Object { $_.Kind -eq $entry.Kind -and $_.Command -ceq $entry.Command -and $_.State -eq $entry.State -and $_.SourceCheckId -eq $entry.SourceCheckId -and $_.Detail -ceq $entry.Detail })
+            if (-not $previous.Count -or $entry.Count -gt $previous[0].Count) { $entry | Select-Object * }
+        }) } else { @() }
+        $omitted = if ($script:Current.Contains('Verification')) { $script:Current.Verification.OmittedCommandCount - $omittedBefore } else { 0 }
+        $script:Context.Cache[$Key] = @{Data=$data;Limitations=@($script:Current.Limitations|Where-Object{$_ -notin $before});Diagnostics=$diagnostics;Commands=$commands;OmittedCommands=$omitted}
+    }
+    if ($cacheHit -and $script:Context.Cache[$Key].ContainsKey('Commands')) {
+        foreach ($entry in $script:Context.Cache[$Key].Commands) {
+            Add-CheckCommand -Kind $entry.Kind -Command $entry.Command -State Reused -SourceCheckId $entry.SourceCheckId -Detail "Reused cached inventory: $Key. The query was not rerun for this check. $($entry.Detail)"
+        }
+        if ($script:Current.Contains('Verification')) { $script:Current.Verification.OmittedCommandCount += $script:Context.Cache[$Key].OmittedCommands }
     }
     foreach($limitation in $script:Context.Cache[$Key].Limitations){
         if ($script:Current.Status -eq 'Completed') { $script:Current.Status = 'Partial' }
@@ -41,12 +55,13 @@ function Get-Cached {
     }
     $script:Context.Cache[$Key].Data
 }
-function Get-Services { Get-Cached 'Services' { Get-CimInstance Win32_Service -ErrorAction Stop | Select-Object Name,DisplayName,PathName,StartName,StartMode,State,ProcessId } }
-function Get-Tasks { Get-Cached 'Tasks' { Get-ScheduledTask -ErrorAction Stop } }
+function Get-Services { Get-Cached 'Services' { Add-CheckCommand PowerShell 'Get-CimInstance Win32_Service -ErrorAction Stop'; Get-CimInstance Win32_Service -ErrorAction Stop | Select-Object Name,DisplayName,PathName,StartName,StartMode,State,ProcessId } }
+function Get-Tasks { Get-Cached 'Tasks' { Add-CheckCommand PowerShell 'Get-ScheduledTask -ErrorAction Stop'; Get-ScheduledTask -ErrorAction Stop } }
 function Get-Applications {
     Get-Cached 'Applications' {
         foreach ($root in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall','HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall')) {
             foreach ($key in @(Get-RegistryChildren $root)) {
+                Add-CheckCommand PowerShell ('Get-ItemProperty -LiteralPath ' + (ConvertTo-VerificationLiteral $key.PSPath) + ' -ErrorAction Stop')
                 $v = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop
                 if ($v.PSObject.Properties['DisplayName']) {
                     [pscustomobject]@{ Name=$v.DisplayName; Version=$(if($v.PSObject.Properties['DisplayVersion']){$v.DisplayVersion}); Publisher=$(if($v.PSObject.Properties['Publisher']){$v.Publisher}); Location=$(if($v.PSObject.Properties['InstallLocation']){$v.InstallLocation}) }
@@ -60,6 +75,7 @@ function Get-RegistryChildren {
     if($script:RegistryVisited -ge $script:Context.MaxItems){Set-CheckPartial 'Registry enumeration item limit reached.';return}
     try {
         $remaining=$script:Context.MaxItems-$script:RegistryVisited
+        Add-CheckCommand PowerShell ('Get-ChildItem -LiteralPath ' + (ConvertTo-VerificationLiteral $Path) + " -ErrorAction Stop | Select-Object -First $($remaining+1)")
         $children=@(Get-ChildItem -LiteralPath $Path -ErrorAction Stop | Select-Object -First ($remaining+1))
         if($children.Count-gt$remaining){Set-CheckPartial 'Registry enumeration item limit reached.'}
         $script:RegistryVisited += [Math]::Min($children.Count,$remaining)
@@ -71,9 +87,12 @@ function Get-RegistryChildren {
 function Read-Registry {
     param([string]$Path, [string]$Name)
     try {
+        Add-CheckCommand PowerShell ('Get-Item -LiteralPath ' + (ConvertTo-VerificationLiteral $Path) + ' -ErrorAction Stop')
         $key = Get-Item -LiteralPath $Path -ErrorAction Stop
         try {
+            Add-CheckCommand NativeApi ('$key.GetValueNames()') -Detail ('Registry key: ' + $Path)
             if ($Name -notin $key.GetValueNames()) { return [pscustomobject]@{ State='Absent'; Value=$null } }
+            Add-CheckCommand NativeApi ('$key.GetValue(' + (ConvertTo-VerificationLiteral $Name) + ',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)') -Detail ('Registry key: ' + $Path + '. Set $key with the preceding Get-Item; close it after inspection. Values are not logged.')
             [pscustomobject]@{ State='Present'; Value=$key.GetValue($Name,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames) }
         } finally { $key.Close() }
     } catch [System.Management.Automation.ItemNotFoundException] { [pscustomobject]@{ State='Absent'; Value=$null } }
@@ -101,8 +120,10 @@ function Get-BoundedFiles {
     while($queue.Count -and $visited -lt $script:Context.MaxItems) {
         $entry=$queue.Dequeue()
         try {
+            Add-CheckCommand PowerShell ('Get-Item -LiteralPath ' + (ConvertTo-VerificationLiteral $entry[0]) + ' -Force -ErrorAction Stop')
             $rootItem=Get-Item -LiteralPath $entry[0] -Force -ErrorAction Stop
             if($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint){Set-CheckPartial 'Reparse-point traversal skipped.';continue}
+            Add-CheckCommand PowerShell ('Get-ChildItem -LiteralPath ' + (ConvertTo-VerificationLiteral $entry[0]) + " -Force -ErrorAction Stop | Select-Object -First $($script:Context.MaxItems+1)")
             $children=@(Get-ChildItem -LiteralPath $entry[0] -Force -ErrorAction Stop | Select-Object -First ($script:Context.MaxItems + 1))
         } catch [System.Management.Automation.ItemNotFoundException] { continue }
         catch { Set-CheckPartial "Cannot enumerate directory: $($entry[0])" -ErrorRecord $_; continue }
@@ -139,11 +160,13 @@ function Test-PathAccess {
     param([string]$Path, [switch]$Registry)
     try {
         if(-not $Registry -and -not (Test-AllowedLocalPath $Path)){return $null}
+        Add-CheckCommand PowerShell ('Get-Acl -LiteralPath ' + (ConvertTo-VerificationLiteral $Path) + ' -ErrorAction Stop')
         $acl=Get-Acl -LiteralPath $Path -ErrorAction Stop
         $descriptor=$acl.GetSecurityDescriptorBinaryForm()
         $rights=if($Registry){ @{SetValue=2;CreateSubKey=4;WriteDacl=0x40000;WriteOwner=0x80000} } else { @{WriteDataOrAddFile=2;AppendOrAddDirectory=4;Delete=0x10000;WriteDacl=0x40000;WriteOwner=0x80000} }
         $allowed=@()
         foreach($right in $rights.Keys){
+            Add-CheckCommand NativeApi ('[StealthPrivesc.Native]::CheckAccess($descriptor,[uint32]' + $rights[$right] + ',[bool]$' + ([bool]$Registry).ToString().ToLowerInvariant() + ')') -Detail ('Target: ' + $Path + '. $descriptor is the binary form of the preceding ACL; requires the module native type.')
             $access=[StealthPrivesc.Native]::CheckAccess($descriptor,[uint32]$rights[$right],[bool]$Registry)
             if($access.Error){ Set-CheckPartial "AccessCheck failed for $Path (Win32 $($access.Error))." }
             elseif($access.Allowed){ $allowed+=$right }
@@ -171,6 +194,8 @@ function Add-ExecutableAccess {
 }
 function Invoke-ReadOnlyCommand {
     param([string]$FileName, [string]$Arguments)
+    $recordedArguments = Get-HelperVerificationArguments $FileName $Arguments
+    Add-CheckCommand Process (('& ' + (ConvertTo-VerificationLiteral $FileName) + ' ' + $recordedArguments).TrimEnd()) -Detail 'ProcessStartInfo invocation with UseShellExecute=false, displayed in PowerShell syntax for manual use. Arguments are verbatim only for known fixed queries; other payloads are redacted. A start failure, nonzero exit or timeout is reported in Diagnostics.'
     $info=New-Object Diagnostics.ProcessStartInfo
     $info.FileName=$FileName; $info.Arguments=$Arguments; $info.UseShellExecute=$false; $info.CreateNoWindow=$true
     $info.RedirectStandardOutput=$true; $info.RedirectStandardError=$true
@@ -255,6 +280,8 @@ function Export-Assessment {
         [void]$html.Append('<tr><th scope="row">'+[Net.WebUtility]::HtmlEncode($status)+'</th><td>'+[Net.WebUtility]::HtmlEncode([string]$count)+'</td></tr>')
     }
     [void]$html.Append('</tbody></table></section>')
+    $analysis = Get-AttackPathValue $Report 'AttackPathAnalysis'
+    if ($analysis) { [void]$html.Append((ConvertTo-AttackPathHtml $analysis)) }
     $hasSkipSummary = if ($Report -is [Collections.IDictionary]) { $Report.Contains('SkippedChecks') } else { [bool]$Report.PSObject.Properties['SkippedChecks'] }
     if ($hasSkipSummary) {
         $skippedChecks = @($Report.SkippedChecks)
@@ -274,11 +301,16 @@ function Export-Assessment {
     foreach($check in $Report.Checks){
         [void]$html.Append('<article><h2>'+[Net.WebUtility]::HtmlEncode("$($check.Id). $($check.Title)")+'</h2><p>'+[Net.WebUtility]::HtmlEncode("$($check.Status) / $($check.Coverage) | $($check.Findings.Count) evidence items")+'</p>')
         foreach($limitation in $check.Limitations){[void]$html.Append('<p><small>'+[Net.WebUtility]::HtmlEncode($limitation)+'</small></p>')}
+        if ($check.PSObject.Properties['Verification']) {
+            [void]$html.Append((ConvertTo-VerificationHtml $check.Verification))
+        }
         if ($check.PSObject.Properties['Diagnostics']) {
             [void]$html.Append(((ConvertTo-DiagnosticHtml @($check.Diagnostics | ForEach-Object { $_ })) -join ''))
         }
+        $findingIndex = 0
         foreach($finding in $check.Findings){
-            [void]$html.Append('<details class="'+$finding.Severity+'"><summary>'+[Net.WebUtility]::HtmlEncode("[$($finding.Severity)] $($finding.Target): $($finding.Observation)")+'</summary><pre>'+[Net.WebUtility]::HtmlEncode(($finding.Evidence | ConvertTo-Json -Depth 12))+'</pre><p>'+[Net.WebUtility]::HtmlEncode($finding.Remediation)+'</p></details>')
+            [void]$html.Append('<details id="check-'+[int]$check.Id+'-finding-'+$findingIndex+'" class="'+$finding.Severity+'"><summary>'+[Net.WebUtility]::HtmlEncode("[$($finding.Severity)] $($finding.Target): $($finding.Observation)")+'</summary><pre>'+[Net.WebUtility]::HtmlEncode(($finding.Evidence | ConvertTo-Json -Depth 12))+'</pre><p>'+[Net.WebUtility]::HtmlEncode($finding.Remediation)+'</p></details>')
+            $findingIndex++
         }
         [void]$html.Append('</article>')
     }

@@ -44,6 +44,10 @@ technical details. Use -Verbose to also display all diagnostics and check timing
 
 .PARAMETER PassThru
 Return the report object, including Checks.Diagnostics and run-level Diagnostics.
+Checks.Verification includes command records, implementation references and a
+per-check rerun command preserving the current scope and collection settings.
+AttackPathAnalysis contains post-scan candidate chains, evidence references,
+unresolved prerequisites and correlation coverage.
 Warnings are written separately from the returned object.
 
 .EXAMPLE

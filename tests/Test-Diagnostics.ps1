@@ -161,7 +161,7 @@ Import-Module (Join-Path $PSScriptRoot '../src/StealthPrivesc.psd1') -Force
         $missingRuntimeCode = '$env:PATH=""; $env:ProgramFiles=''' + $missingRoot + '''; $env:ProgramW6432=''' + $missingRoot + '''; $env:WINDIR=''' + $missingRoot + '''; & ''' + $runnerPath + ''''
         $encodedMissingRuntime = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($missingRuntimeCode))
         $missingRuntime = Invoke-DiagnosticTestProcess "-NoLogo -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand $encodedMissingRuntime"
-        Assert-Diagnostic ($missingRuntime.ExitCode -eq 1 -and $missingRuntime.Output -match 'Test suites not run: 6 of 6') 'Missing runtimes report every unrun suite and fail validation.'
+        Assert-Diagnostic ($missingRuntime.ExitCode -eq 1 -and $missingRuntime.Output -match 'Test suites not run: 10 of 10') 'Missing runtimes report every unrun suite and fail validation.'
         Assert-Diagnostic ($missingRuntime.Output -match 'Next action: Install or enable 64-bit' -and $missingRuntime.Output -notmatch 'Validation passed:') 'Missing-runtime output provides a fix instead of a misleading pass.'
 
         $verboseStream = @(Invoke-StealthPrivesc -CheckId 1,2 -PassThru -Verbose 4>&1 3>$null)

@@ -3,7 +3,7 @@
 param()
 
 $ErrorActionPreference = 'Stop'
-$testNames = @('Test-StealthPrivesc.ps1', 'Test-ExtendedChecks.ps1', 'Test-Diagnostics.ps1')
+$testNames = @('Test-StealthPrivesc.ps1', 'Test-ExtendedChecks.ps1', 'Test-Diagnostics.ps1', 'Test-Verification.ps1', 'Test-AttackPaths.ps1')
 
 if ($env:OS -ne 'Windows_NT') {
     Write-Host "NOT RUN: all $($testNames.Count * 2) test-suite/runtime combinations. These tests require Windows APIs and Windows PowerShell 5.1."

@@ -67,6 +67,60 @@ $report.Checks | Select-Object Id,Status,Findings,Limitations
 
 A finding is evidence to review, not automatically a vulnerability or confirmed escalation path. Check its `Observation`, `Evidence`, `Remediation`, and scope notes. Missing findings do not prove a system is safe.
 
+### Review correlated attack paths
+
+After collection, the scanner automatically correlates the evidence and places ranked **Attack path candidates** near the top of the HTML report. JSON and `-PassThru` expose the same results in `AttackPathAnalysis.Paths`. The engine reads the report already collected; it performs no additional host queries or changes.
+
+Each candidate includes a chain of observed facts, supporting check/finding links, unresolved prerequisites, remediation, and the source checks' rerun commands. `Corroborated` means the required control and execution-context facts were observed; it does not mean exploitation succeeded. Directory control, ownership/DACL rights, and scheduler authorization remain conditional. Incomplete checks lower confidence. Access found under an already elevated token is classified as `PrivilegedAuditExposure`, with informational priority.
+
+| Correlation rule | Required checks |
+|---|---|
+| SYSTEM service configuration control | 11 + 12 |
+| SYSTEM service registry control | 11 + 14 |
+| Writable SYSTEM service executable or immediate parent | 11 + 16 |
+| Writable unquoted SYSTEM service interception path | 11 + 17 |
+| Enabled SYSTEM task definition control | 22 + 24 |
+| Writable enabled SYSTEM task executable or immediate parent | 22 + 23 |
+
+Check 20 supplies optional service start/stop permission evidence. Joins use exact service/task identities and absolute file paths, including immediate-parent matches. The engine does not infer domain-account privileges, credential reuse, lateral movement, DLL loader behavior, script/configuration arguments, or environment-dependent paths. Other findings remain available for review. Disabled services/tasks are excluded. An empty path list does not establish safety: inspect **Correlation rule coverage** for missing checks and collection limits.
+
+```powershell
+$report = .\Invoke-StealthPrivesc.ps1 -Category Services,TasksStartup -PassThru
+$report.AttackPathAnalysis.Paths |
+    Select-Object Priority,Confidence,RuleId,Target,Resource
+$report.AttackPathAnalysis.Paths[0] | Format-List *
+```
+
+You can also analyze an existing JSON report without rescanning:
+
+```powershell
+Import-Module .\src\StealthPrivesc.psd1
+$saved = Get-Content .\reports\assessment-example.json -Raw | ConvertFrom-Json
+$analysis = Get-StealthPrivescAttackPathAnalysis -Report $saved -MaxPaths 200
+$analysis.Paths
+```
+
+Default limits are 100,000 input findings and 200 returned paths. Discovery is capped at the greater of 2,000 candidates or `MaxPaths`. `EvidenceTruncated`, `DiscoveryTruncated`, and `OmittedPaths` disclose limits; `TotalCandidates` counts only discovered candidates. Ranking applies to discovered paths. The offline command accepts `-MaxEvidence` and `-MaxPaths` to adjust these bounds. If correlation fails, original findings are still exported and analysis status is `Error`.
+
+### Manually verify a check
+
+Every selected check now has a **Commands and verification** section in HTML and a `Verification` object in JSON / `-PassThru`, even when it produces no findings:
+
+- `RerunCommand` selects that check and preserves the run's enabled scope switches, limits, search roots and reference database paths. Run it from `WorkingDirectory` with the same identity, elevation and PowerShell version. It returns a report object without saving another report; add `-OutputDirectory` to save one.
+- `Commands` records the internal collector invocation and instrumented shared queries: service/task inventory, registry reads, bounded directory enumeration, ACL queries/access checks and external helper launches. Entries marked `Attempted` can still fail; consult the check's status and diagnostics. Repeated entries have a `Count`. Cached queries are marked `Reused` with their original `SourceCheckId`.
+- `SourceReferences` shows the underlying PowerShell and native API expressions with source file/line references, including helpers. These are implementation references, **not a complete execution trace**: conditional expressions may not run, and variables in them need the collector's context. Use the rerun command to reproduce the full check.
+
+Skipped checks gated before dispatch have `CollectorStarted = false` and an empty command list. A collector that starts and then skips on an environment prerequisite retains the operations it attempted. The rerun command preserves the original opt-ins; use the skipped-check guidance below to enable any missing scope.
+
+Command records omit query results. Fixed, known helper arguments are retained; other arguments, including encoded PowerShell payloads, are redacted. Paths and registry value names remain visible. Each check retains up to 1,000 distinct command records and discloses additional omissions in `OmittedCommandCount`. A standalone rerun uses a fresh inventory cache, so a changing host can produce different evidence.
+
+```powershell
+$report = .\Invoke-StealthPrivesc.ps1 -CheckId 47 -PassThru
+$report.Checks[0].Verification.RerunCommand
+$report.Checks[0].Verification.Commands | Format-List *
+$report.Checks[0].Verification.SourceReferences | Format-Table -Wrap
+```
+
 ### See which checks were skipped and make them run
 
 Every skipped check now prints its reason and next steps without needing `-Verbose`, including when using `-PassThru`. The end-of-run console count, HTML **Skipped checks** section, JSON `SkippedChecks` list, and troubleshooting log make these omissions visible. Only checks selected for this run are counted; checks excluded by your `-Category` or `-CheckId` filter were not requested.
@@ -396,7 +450,7 @@ On 64-bit Windows, with both 64-bit PowerShell 7 and Windows PowerShell 5.1 inst
 .\tools\Test-Project.ps1
 ```
 
-The runner checks the runtime versions and architectures, then runs all three test scripts under each edition. It exits with code `0` only when all six invocations pass. Its summary explicitly counts suites that did not run; missing or unusable runtimes produce `NOT RUN` rows with a reason and repair action, plus a nonzero exit code. Each passing suite reports zero skipped test groups. Running the tests on a non-Windows platform reports `NOT RUN` and exits nonzero instead of silently omitting Windows test groups.
+The runner checks the runtime versions and architectures, then runs all five test scripts under each edition. It exits with code `0` only when all ten invocations pass. Its summary explicitly counts suites that did not run; missing or unusable runtimes produce `NOT RUN` rows with a reason and repair action, plus a nonzero exit code. Running the tests on a non-Windows platform reports `NOT RUN` and exits nonzero instead of silently omitting Windows test groups.
 
 Run validation as a user with a loaded Windows profile: DPAPI fixtures can fail under sandbox or service tokens without a loaded profile. A failed suite may stop before its later assertions; fix the first failure and rerun the matrix. Test fixtures use a uniquely named temporary directory inside the repository and the runner removes it when finished. Scanner checks intentionally marked `Skipped` inside gating tests are expected outcomes being asserted, not omitted automated tests.
 
