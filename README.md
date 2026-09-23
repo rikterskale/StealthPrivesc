@@ -4,9 +4,19 @@ A PowerShell Windows privilege-escalation exposure scanner. Version 0.2 provides
 
 See [coverage](docs/COVERAGE.md) for each collector's scope, including heuristic assessments and platform limits. Implemented does not mean every host, format or application is supported; runtime limits produce Partial results.
 
+## Supported platforms
+
+The intended client targets are 64-bit Windows 11 versions 24H2, 25H2 and 26H1, using Home, Pro, Enterprise or Education. Windows 10 is outside the supported-platform scope. The intended server targets are 64-bit Windows Server 2019, 2022 and 2025, using Standard or Datacenter. Other Windows editions, ARM64, Windows Server Essentials and Azure Edition are not in the stated support scope.
+
+Use a Windows 11 version and edition that is still receiving Microsoft security updates. Windows 11 servicing dates differ by edition; version 26H1 is intended for new devices and is not offered as an in-place update from 24H2 or 25H2. Windows Server support follows each release's Microsoft lifecycle. These platform targets describe intended compatibility, not certification on every edition or release. The automated test matrix below checks both PowerShell editions on the test host; it does not provide a separate OS-version test run for every target. See Microsoft's [Windows 11 release information](https://learn.microsoft.com/en-us/windows/release-health/windows11-release-information) and [Windows Server release information](https://learn.microsoft.com/en-us/windows/release-health/windows-server-release-info) for current servicing details.
+
+## License
+
+Project-authored material is licensed under the [MIT License](LICENSE). Third-party components and data retain their separate terms; see [third-party notices](docs/THIRD-PARTY.md) and the accompanying license files.
+
 ## Run
 
-Use 64-bit Windows PowerShell 5.1 or PowerShell 7. Windows 10/11 and current Windows Server are the primary targets. Windows components provide local APIs; AD checks require RSAT ActiveDirectory. Firefox recovery uses a verified installed Mozilla NSS runtime.
+Use 64-bit Windows PowerShell 5.1 or PowerShell 7 on a supported platform. Windows components provide local APIs; AD checks require RSAT ActiveDirectory. Firefox recovery uses a verified installed Mozilla NSS runtime.
 
 ```powershell
 # Catalog only.
