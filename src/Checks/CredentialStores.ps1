@@ -2,14 +2,14 @@ function Invoke-CredentialStoreCheck {
     param([int]$Id)
     switch($Id){
         76 {
-            if(-not('StealthPrivesc.NativeSspi'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'NativeSspi.cs') -ErrorAction Stop}
+            if(-not('StealthPrivesc.NativeSspi'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'Native/NativeSspi.cs') -ErrorAction Stop}
             $result=[StealthPrivesc.NativeSspi]::Probe()
             Add-Evidence 'Current-logon NTLM security package' 'Local SSPI authentication probe; no challenge manipulation, security downgrade or network exchange. Authentication tokens erased before reporting.' $result $(if($result.CredentialResponseReturned){'Low'}else{'Information'})
             if($result.Status-ge2147483648){Set-CheckPartial 'SSPI probe did not complete under the current token/policy.'}
         }
         73 {
             if([Environment]::OSVersion.Version-lt[version]'6.2'){Set-CheckSkipped 'Vault collector requires Windows 8 / Server 2012 or newer.' -SkipReason UnsupportedPlatform;return}
-            if(-not('StealthPrivesc.NativeVault'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'NativeVault.cs') -ErrorAction Stop}
+            if(-not('StealthPrivesc.NativeVault'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'Native/NativeVault.cs') -ErrorAction Stop}
             $result=[StealthPrivesc.NativeVault]::Inspect($script:Context.MaxItems)
             foreach($item in $result.Items){
                 Add-Evidence "$($item.VaultId)/$($item.ItemIndex)" 'Windows Vault entry retrieval attempted in the current user context; returned authenticator data erased before reporting.' $item $(if($item.SecretReturned){'Medium'}else{'Information'})

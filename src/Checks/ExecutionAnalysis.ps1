@@ -2,7 +2,7 @@ function Invoke-ExecutionAnalysisCheck {
     param([int]$Id)
     switch($Id){
         19 {
-            if(-not('StealthPrivesc.NativeServices'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'NativeServices.cs')}
+            if(-not('StealthPrivesc.NativeServices'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'Native/NativeServices.cs')}
             foreach($service in Get-Limited @(Get-Services|Where-Object StartName -in @('LocalSystem','NT AUTHORITY\SYSTEM'))){
                 try{$settings=[StealthPrivesc.NativeServices]::Recovery($service.Name);if(3-in$settings.ActionTypes){Add-Evidence $service.Name 'SYSTEM service has a run-command recovery action.' @{Command=(Get-CommandShape $settings.Command);ActionTypes=$settings.ActionTypes;DelaysMilliseconds=$settings.Delays;NonCrashFailures=$settings.NonCrashFailures;ResetSeconds=$settings.ResetSeconds};foreach($path in Get-ReferencedPaths (Get-ExecutablePath $settings.Command) $settings.Command ([Environment]::SystemDirectory)){Add-ExecutableAccess $path 'Writable SYSTEM service recovery command target.'}}}
                 catch{Set-CheckPartial 'Some service recovery settings are inaccessible.' -ErrorRecord $_}

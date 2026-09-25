@@ -13,7 +13,7 @@ namespace StealthPrivesc {
     public sealed class NamespaceResult { public NamespaceEntry[] Entries; public uint Status; public bool Truncated; }
     public sealed class ObjectDescriptor { public byte[] Descriptor; public uint Status; }
     public static class NativeObjects {
-        [StructLayout(LayoutKind.Sequential)] struct UnicodeString { public ushort Length, MaximumLength; public IntPtr Buffer; }
+        [StructLayout(LayoutKind.Sequential)] public struct UnicodeString { public ushort Length, MaximumLength; public IntPtr Buffer; }
         [StructLayout(LayoutKind.Sequential)] struct ObjectAttributes {
             public int Length; public IntPtr Root, Name; public uint Attributes; public IntPtr SecurityDescriptor, QualityOfService;
         }

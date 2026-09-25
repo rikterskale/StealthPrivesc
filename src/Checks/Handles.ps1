@@ -1,6 +1,6 @@
 function Invoke-HandleCheck {
     # A process boundary also bounds path-resolution callbacks on unusual file systems.
-    $source64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Join-Path $script:ModuleRoot 'NativeHandles.cs')))
+    $source64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Join-Path $script:ModuleRoot 'Native/NativeHandles.cs')))
     $code=@'
 $ErrorActionPreference='Stop'
 $source=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__SOURCE__'))

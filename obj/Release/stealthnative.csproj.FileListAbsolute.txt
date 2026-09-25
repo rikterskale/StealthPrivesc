@@ -1,0 +1,5 @@
+C:\Users\tsaxon\Documents\Github\StealthPrivesc\obj\Release\stealthnative.csproj.AssemblyReference.cache
+C:\Users\tsaxon\Documents\Github\StealthPrivesc\obj\Release\stealthnative.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\tsaxon\Documents\Github\StealthPrivesc\obj\Release\stealthnative.csproj.CoreCompileInputs.cache
+C:\Users\tsaxon\Documents\Github\StealthPrivesc\dist\stealthnative.dll
+C:\Users\tsaxon\Documents\Github\StealthPrivesc\obj\Release\stealthnative.dll

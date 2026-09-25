@@ -126,7 +126,7 @@ $module=Get-Module StealthPrivesc
         $roundtrip=Get-Content (Get-ChildItem $testRoot -Filter '*.json').FullName -Raw|ConvertFrom-Json
         Assert-True ($roundtrip.Checks[0].Findings[0].Target-eq'<script>alert(1)</script>') 'JSON must preserve structured evidence safely.'
         if($env:OS-eq'Windows_NT'){
-            if(-not('StealthPrivesc.Native'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'Native.cs')}
+            if(-not('StealthPrivesc.Native'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'Native/Native.cs')}
             $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
             $allow='(A;;0x2;;;'+$sid+')'
             foreach($restricted in [StealthPrivesc.Native]::Sids(11)){$allow+='(A;;0x2;;;'+$restricted.Sid+')'}
@@ -145,7 +145,7 @@ $module=Get-Module StealthPrivesc
             Assert-True (($smoke.Checks|Where-Object Id -eq 70).Status-eq'Skipped') 'Domain checks require opt-in.'
             Assert-True (($smoke.Checks|Where-Object Id -eq 132).Status-eq'Skipped') 'External network checks require opt-in.'
             Assert-True (($smoke.Checks|Where-Object Id -eq 100).Findings.Count-eq6) 'Single-entry registry rule groups must preserve every setting.'
-            $nativeText=Get-Content (Join-Path $script:ModuleRoot 'Native.cs') -Raw
+            $nativeText=Get-Content (Join-Path $script:ModuleRoot 'Native/Native.cs') -Raw
             Assert-True ($nativeText-notmatch'extern.*(?:AdjustTokenPrivileges|WriteProcessMemory|CreateRemoteThread|ChangeServiceConfig|StartService|ControlService)\(') 'Native surface must remain query-only.'
         }
         Write-Host "PASS: $script:TestsPassed assertions; skipped test groups: 0. Scanner checks intentionally skipped by gating fixtures are tested outcomes, not skipped assertions."

@@ -5,7 +5,7 @@ function Invoke-FirefoxRecoveryProbe {
     if(-not$library){Set-CheckPartial 'Firefox NSS runtime is not installed in a supported location; login recovery cannot be assessed.';return @()}
     $signature=Get-AuthenticodeSignature -LiteralPath $library -ErrorAction Stop
     if($signature.Status-ne'Valid'-or-not$signature.SignerCertificate-or$signature.SignerCertificate.Subject-notmatch'Mozilla Corporation'){Set-CheckPartial 'Firefox NSS runtime publisher could not be verified.';return @()}
-    $payload=@{Source=(Join-Path $script:ModuleRoot 'NativeNss.cs');Library=$library;Path=$Path;MaxItems=$script:Context.MaxItems;MaxBytes=$script:Context.MaxFileBytes}|ConvertTo-Json -Compress
+    $payload=@{Source=(Join-Path $script:ModuleRoot 'Native/NativeNss.cs');Library=$library;Path=$Path;MaxItems=$script:Context.MaxItems;MaxBytes=$script:Context.MaxFileBytes}|ConvertTo-Json -Compress
     $encodedPayload=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload))
     $code=@'
 $ErrorActionPreference='Stop'

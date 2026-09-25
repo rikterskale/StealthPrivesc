@@ -110,7 +110,7 @@ function New-AssessmentDiagnostic {
         if ($code -eq 'CollectionIncomplete') { $code = 'OutputFailed'; $explanation = 'Saving output did not complete. This may be a problem with the output location or an internal formatting error; the technical details help distinguish them.' }
         $steps = @('Check that -OutputDirectory is a writable local directory and that the drive has free space.', 'Check for a file occupying the directory path, a disconnected drive, or a report file held open by another program.', 'Choose another writable output directory. If a report object is available, retain it before retrying export.', 'If the directory is writable and the error persists, share the diagnostic code, exception types and source location with the project maintainer.')
     } elseif ($Phase -eq 'Initialization') {
-        $steps += 'Verify the src/*.cs files are present and that Windows policy permits Add-Type compilation. Use an approved script execution process if policy blocks the scanner.'
+        $steps += 'Verify the src/Native/*.cs files are present and that Windows policy permits Add-Type compilation. Use an approved script execution process if policy blocks the scanner.'
     }
     $verification = $null
     if ($SkipReason) {

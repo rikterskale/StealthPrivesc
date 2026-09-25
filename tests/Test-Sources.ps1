@@ -37,7 +37,7 @@ Write-Host "PASS: module manifest $($manifest.Version) and exported functions."
 
 # Compile every native collector without invoking its APIs. Individual suites
 # exercise bounded native behavior and synthetic fixtures separately.
-$nativeFiles = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot 'src') -Filter '*.cs' -File)
+$nativeFiles = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot 'src/Native') -Filter '*.cs' -File)
 foreach ($file in $nativeFiles) {
     if ($file.BaseName -eq 'NativeWifi') {
         & (Get-Module StealthPrivesc) { Initialize-WifiNativeType }

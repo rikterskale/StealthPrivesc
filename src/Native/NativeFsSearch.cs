@@ -22,7 +22,6 @@ namespace StealthPrivesc {
         public static SearchResult Search(string root, string pattern, string whole, int maximum, int seconds, int depth) {
             var result = new SearchResult();
             if (maximum <= 0 || depth <= 0) { return result; }
-            var name = RegexOptions(pattern);
             Regex wholeRegex = whole == null ? null : RegexOptions(whole);
             var queue = new Queue<Tuple<string, int>>();
             queue.Enqueue(Tuple.Create(root, 0));
@@ -33,29 +32,25 @@ namespace StealthPrivesc {
                 if (next.Item2 > depth) { continue; }
                 string current = next.Item1;
                 if (!current.EndsWith("\\")) { current += "\\"; }
-                IntPtr directory = IntPtr.Zero;
+                IntPtr directory;
                 long entry;
-                try {
-                    directory = FindFirstFile(current + "*", out entry);
-                    if (directory == IntPtr.Zero) {
-                        int error = Marshal.GetLastWin32Error();
-                        if (error != 3 && error != 14 && error != 5 && error != 8 && error != 267) {
-                            if (result.Error == null) { result.Error = error.ToString(CultureInfo.InvariantCulture); }
-                        }
-                        result.Inaccessible++;
-                        continue;
+                directory = FindFirstFile(current + "*", out entry);
+                if (directory == IntPtr.Zero) {
+                    int error = Marshal.GetLastWin32Error();
+                    if (error != 3 && error != 14 && error != 5 && error != 8 && error != 267) {
+                        if (result.Error == null) { result.Error = error.ToString(CultureInfo.InvariantCulture); }
                     }
-                } finally { }
+                    result.Inaccessible++;
+                    continue;
+                }
                 var item = (Win32)Marshal.PtrToStructure(new IntPtr(entry + 0), typeof(Win32));
-                bool first = true;
                 while (true) {
                     if (!string.Equals(item.Name, ".", StringComparison.Ordinal) && !string.Equals(item.Name, "..", StringComparison.Ordinal)) {
                         string child = current + item.Name;
-                        if (first && item.Attributes != 0 && ((item.Attributes & 0x400) != 0 && item.Tag[0] == 0x0A)) { }
                         bool folder = (item.Attributes & 0x10) != 0;
                         if (!folder) {
                             result.Visited++;
-                            if (result.Items.Count < maximum && (wholeRegex == null ? Regex.IsMatch(item.Name, pattern, RegexOptions.IgnoreCase) : wholeRegex.IsMatch(child))) {
+                            if (result.Items.Count < maximum && (wholeRegex == null ? Regex.IsMatch(item.Name, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase) : wholeRegex.IsMatch(child))) {
                                 var entry2 = new FileEntry {
                                     Path = child, Name = item.Name, Length = unchecked((long)item.Length + ((long)item.LengthHigh << 32)),
                                     Creation = ((DateTime)DateTime.FromFileTimeUtc(item.Creation)).Ticks,
@@ -68,7 +63,7 @@ namespace StealthPrivesc {
                             }
                         } else {
                             if ((item.Attributes & 0x400) != 0) {
-                                if (result.Visited < 0x100000) { }
+                                if (result.Visited < 0x100000) { /* skip hidden */ }
                             } else if (result.Visited < 0x20000) {
                                 if (!string.Equals(item.Name, "System Volume Information", StringComparison.OrdinalIgnoreCase) && !string.Equals(item.Name, "$RECYCLE.BIN", StringComparison.OrdinalIgnoreCase) && !string.Equals(item.Name, "$Extend", StringComparison.OrdinalIgnoreCase)) {
                                     queue.Enqueue(Tuple.Create(child, next.Item2 + 1));
@@ -77,7 +72,6 @@ namespace StealthPrivesc {
                         }
                     }
                     if (result.Items.Count >= maximum) { result.Truncated = true; }
-                    if (result.Truncated && wholeRegex == null) { }
                     if (!FindNextFile(directory, ref entry)) { break; }
                     item = (Win32)Marshal.PtrToStructure(new IntPtr(entry + 0), typeof(Win32));
                     if (result.Truncated) { break; }
@@ -86,27 +80,18 @@ namespace StealthPrivesc {
             }
             return result;
         }
-        internal static Regex RegexOptions(string pattern) { return new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant); }
+        internal static Regex RegexOptions(string pattern) { return new Regex(pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant); }
         public static HiveResult Hive(string hive, bool probe, bool write) {
             var result = new HiveResult();
             IntPtr handle = IntPtr.Zero;
             try {
-                uint share = 0x1 | 0x2 | 0x4;
-                if (probe) {
-                    if (!write) { share = 0x1 | 0x2 | 0x4; }
-                    handle = CreateFile(hive, 0x80000000 | 0x40000000, share, IntPtr.Zero, 3, 0x2000000, IntPtr.Zero);
-                } else {
-                    share = 0x1 | 0x2;
-                    handle = CreateFile(hive, 0x80000000, share, IntPtr.Zero, 3, 0x2000000, IntPtr.Zero);
-                }
+                uint share, access;
+                if (probe) { share = (uint)(0x1 | 0x2 | 0x4); access = (uint)(0x80000000 | 0x40000000); }
+                else { share = 0x3; access = 0x80000000; }
+                handle = CreateFile(hive, access, share, IntPtr.Zero, 3, 0x2000000, IntPtr.Zero);
                 if (handle == IntPtr.Zero) {
                     result.Error = Marshal.GetLastWin32Error();
-                    if (result.Error != 5) { result.Opened = false; }
-                    if (result.Error != 5 && result.Error != 7 && result.Error != 13 && result.Error != 32) {
-                        if (result.Error == 0) { result.Error = 0; }
-                    }
-                    if (result.Error == 5 || result.Error == 7 || result.Error == 13 || result.Error == 32) { return result; }
-                    if (result.Error == 0) { } else if (result.Error != 5) { return result; }
+                    if (!(result.Error == 5 || result.Error == 7 || result.Error == 13 || result.Error == 32)) { result.Opened = false; }
                     return result;
                 }
                 if (!probe) {
@@ -117,9 +102,10 @@ namespace StealthPrivesc {
                             result.Error = Marshal.GetLastWin32Error();
                             return result;
                         }
-                        string magic = Encoding.ASCII.GetString(new byte[] { (byte)(buffer + 0), (byte)(buffer + 1), (byte)(buffer + 2), (byte)(buffer + 3) });
-                        if (magic != "regf") {
-                            result.Error = 0xC000000D;
+                        var magic = new byte[4];
+                        for (int i = 0; i < 4; i++) { magic[i] = (byte)Marshal.ReadByte(buffer, i); }
+                        if (!string.Equals(Encoding.ASCII.GetString(magic), "regf", StringComparison.Ordinal)) {
+                            result.Error = unchecked((int)0xC000000D);
                             return result;
                         }
                     } finally { Marshal.FreeHGlobal(buffer); }
@@ -138,13 +124,12 @@ namespace StealthPrivesc {
                 handle = CreateFile(file, 0x80100, 0x3, IntPtr.Zero, 3, 0, IntPtr.Zero);
                 if (handle == IntPtr.Zero) { result.Error = Marshal.GetLastWin32Error(); return result; }
                 uint size;
-                IntPtr needed;
-                if (!GetFileSize(handle, out size, out needed)) { result.Error = Marshal.GetLastWin32Error(); return result; }
-                if (size < 0x4C || size > 0x40000) { result.Error = 0xC0000004; return result; }
-                buffer = Marshal.AllocHGlobal(size);
-                uint read;
-                if (!ReadFile(handle, buffer, size, out read, IntPtr.Zero) || read < 0x4C) { result.Error = Marshal.GetLastWin32Error(); return result; }
-                if (Marshal.ReadInt32(buffer, 0) != 0x4C504B) { result.Error = 0xC000000D; return result; }
+                if (!GetFileSize(handle, out size, IntPtr.Zero)) { result.Error = Marshal.GetLastWin32Error(); return result; }
+                if (size < 0x4C || size > 0x40000) { result.Error = unchecked((int)0xC0000004); return result; }
+                buffer = Marshal.AllocHGlobal(new IntPtr(unchecked((long)size)));
+                uint got;
+                if (!ReadFile(handle, buffer, size, out got, IntPtr.Zero) || got < 0x4C) { result.Error = Marshal.GetLastWin32Error(); return result; }
+                if (Marshal.ReadInt32(buffer, 0) != 0x4C504B) { result.Error = unchecked((int)0xC000000D); return result; }
                 ulong flags = (ulong)Marshal.ReadInt32(buffer, 0x14);
                 int info = Marshal.ReadInt32(buffer, 0x28);
                 int extra = Marshal.ReadInt32(buffer, 0x3C);
@@ -183,7 +168,6 @@ namespace StealthPrivesc {
                         cursor += 8 + value;
                     }
                 }
-                if (result.Target != null && (result.Target[0] == '\\' || (result.Target.Length > 1 && result.Target[1] == ':'))) { }
                 if (result.Target != null && result.Relative != null) {
                     string work = result.WorkDir == null ? System.IO.Path.GetDirectoryName(file) : result.WorkDir;
                     if (!string.IsNullOrEmpty(work)) {
@@ -213,21 +197,21 @@ namespace StealthPrivesc {
             IntPtr handle = IntPtr.Zero;
             IntPtr buffer = IntPtr.Zero;
             try {
-                handle = CreateFile(file, 0x80100, 0x3, IntPtr.Zero, as int?3, 0, IntPtr.Zero);
+                handle = CreateFile(file, 0x80100, 0x3, IntPtr.Zero, 3, 0, IntPtr.Zero);
                 if (handle == IntPtr.Zero) { result.Error = Marshal.GetLastWin32Error(); return result; }
-                uint size; IntPtr needed;
-                if (!GetFileSize(handle, out size, out needed)) { result.Error = Marshal.GetLastWin32Error(); return result; }
-                if (size < 0x1C) { result.Error = 0xC0000004; return result; }
-                buffer = Marshal.AllocHGlobal(size < 0x400000 ? size : 0x400000);
+                uint size;
+                if (!GetFileSize(handle, out size, IntPtr.Zero)) { result.Error = Marshal.GetLastWin32Error(); return result; }
+                if (size < 0x1C) { result.Error = unchecked((int)0xC0000004); return result; }
+                buffer = Marshal.AllocHGlobal(new IntPtr(unchecked((long)(size < 0x400000 ? size : 0x400000))));
                 uint read;
                 if (!ReadFile(handle, buffer, size, out read, IntPtr.Zero) || read < 0x1C) { result.Error = Marshal.GetLastWin32Error(); return result; }
                 int magic = Marshal.ReadInt32(buffer, 0);
                 result.Version = (magic == 0xD4C3B2A1 || magic == 0xD4C3B2A0) ? 2 : 3;
                 result.Network = Marshal.ReadInt32(buffer, 0x14);
                 int cursor = 0x1C;
-                int big = (magic & 0xF) != 0 || magic == 0xA1B2C3D4;
+                bool big = (magic & 0xF) != 0 || magic == unchecked((int)0xA1B2C3D4);
                 while (cursor + 0x14 <= (int)size && result.Packets.Count < maximum) {
-                    uint sec = (uint)(big ? (uint)(byte)Marshal.ReadInt32(buffer, cursor) << 24 | (uint)(byte)Marshal.ReadInt32(buffer, cursor + 4) << 16 : Marshal.ReadInt32(buffer, cursor));
+                    uint sec = big ? ((uint)(byte)Marshal.ReadInt32(buffer, cursor) << 24) | ((uint)(byte)Marshal.ReadInt32(buffer, cursor + 4) << 16) : (uint)Marshal.ReadInt32(buffer, cursor);
                     uint frac = big ? (uint)(byte)Marshal.ReadInt32(buffer, cursor + 8) : (uint)Marshal.ReadInt32(buffer, cursor + 8);
                     uint length = big ? (uint)((byte)Marshal.ReadInt32(buffer, cursor + 12) << 24 | (byte)Marshal.ReadInt32(buffer, cursor + 16) << 16) : (uint)Marshal.ReadInt32(buffer, cursor + 12);
                     if (length > 0x100000) { break; }

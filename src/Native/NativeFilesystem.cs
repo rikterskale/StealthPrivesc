@@ -54,10 +54,10 @@ namespace StealthPrivesc {
             string text = Uni(block, (int)(length / 2));
             return string.IsNullOrEmpty(text) ? null : text;
         }
-        internal static void VersionBlock(IntPtr version, out string company, out string file, out string internal, out string original, out string product, out string description) {
+        internal static void VersionBlock(IntPtr version, out string company, out string file, out string intern, out string original, out string product, out string description) {
             IntPtr translation;
             if (!VerQueryValue(version, "\\VarFileInfo\\Translation", out translation, out uint unused) || translation == IntPtr.Zero) {
-                company = file = internal = original = product = description = null;
+                company = file = intern = original = product = description = null;
                 return;
             }
             int language = (ushort)Marshal.ReadInt16(translation, 0);
@@ -65,7 +65,7 @@ namespace StealthPrivesc {
             string prefix = string.Format(CultureInfo.InvariantCulture, "\\StringFileInfo\\{0:x4}{1:x4}\\", language, codepage);
             company = Version(version, prefix + "CompanyName");
             file = Version(version, prefix + "FileVersion");
-            internal = Version(version, prefix + "InternalName");
+            intern = Version(version, prefix + "InternalName");
             original = Version(version, prefix + "OriginalFilename");
             product = Version(version, prefix + "ProductName");
             description = Version(version, prefix + "FileDescription");
@@ -74,17 +74,17 @@ namespace StealthPrivesc {
             IntPtr provider;
             uint status = BCryptOpenAlgorithmProvider(out provider, algorithm, IntPtr.Size == 8 ? "RSA" : null, 0);
             if (status != 0) { throw new Win32Exception((int)status); }
-            IntPtr digest;
+            IntPtr digest = IntPtr.Zero;
             try {
                 IntPtr value;
                 uint needed, length = 0;
                 status = BCryptGetProperty(provider, "ObjectLength", IntPtr.Zero, 0, out needed, 0);
                 if (status != 0) { throw new Win32Exception((int)status); }
-                value = Marshal.AllocHGlobal(needed);
+                value = Marshal.AllocHGlobal(new IntPtr(unchecked((long)needed)));
                 try {
-                    if (BCryptGetProperty(provider, "ObjectLength", value, needed, out needed, 0) != 0) { throw new Win32Exception(0xC000000D); }
+                    if (BCryptGetProperty(provider, "ObjectLength", value, needed, out needed, 0) != 0) { throw new Win32Exception(unchecked((int)0xC000000D)); }
                     length = (uint)Marshal.ReadInt32(value);
-                    digest = Marshal.AllocHGlobal(length);
+                    digest = Marshal.AllocHGlobal(new IntPtr(unchecked((long)length)));
                     byte[] chunk = new byte[0x10000];
                     IntPtr buffer = Marshal.AllocHGlobal(chunk.Length);
                     try {
@@ -92,7 +92,7 @@ namespace StealthPrivesc {
                             uint read;
                             if (!ReadFile(handle, buffer, (uint)chunk.Length, out read, IntPtr.Zero) && read == 0) { break; }
                             if (read == 0) { break; }
-                            if (BCryptHashObject(provider, digest, length, buffer, read, IntPtr.Zero, 0) != 0) { throw new Win32Exception(0xC000000E); }
+                            if (BCryptHashObject(provider, digest, length, buffer, read, IntPtr.Zero, 0) != 0) { throw new Win32Exception(unchecked((int)0xC000000E)); }
                         }
                     } finally { Marshal.FreeHGlobal(buffer); }
                     var result = new byte[length];
@@ -104,7 +104,7 @@ namespace StealthPrivesc {
                 }
             } finally { BCryptCloseAlgorithmProvider(provider, 0); }
         }
-        internal static FileEntry Inspect(string path, bool hash, string algorithm, bool version, bool security, bool descriptor) {
+        internal static FileEntry Inspect(string path, bool hash, string algorithm, bool version, bool security) {
             var result = new FileEntry { Path = path, Name = path.Substring(path.LastIndexOf('\\') + 1) };
             IntPtr handle = IntPtr.Zero;
             try {
@@ -129,15 +129,15 @@ namespace StealthPrivesc {
                     IntPtr needed;
                     uint found = GetFileVersionInfoSize(path, out needed);
                     if (found != 0 && needed != IntPtr.Zero) {
-                        IntPtr block = Marshal.AllocHGlobal(needed.ToInt64());
+                        IntPtr block = Marshal.AllocHGlobal(new IntPtr(needed.ToInt64()));
                         try {
                             if (GetFileVersionInfo(path, found, block)) { VersionBlock(block, out result.Company, out result.FileVersion, out result.Internal, out result.Original, out result.Product, out result.Description); }
                         } finally { Marshal.FreeHGlobal(block); }
                     }
                 }
                 if (security) {
-                    IntPtr owner, group, info;
-                    if (!GetSecurityInfo(handle, 1, IntPtr.Zero, out owner, out group, IntPtr.Zero, IntPtr.Zero, out info)) {
+                    IntPtr owner, group;
+                    if (!GetSecurityInfo(handle, 1, IntPtr.Zero, out owner, out group, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero)) {
                         result.Error = Marshal.GetLastWin32Error();
                     }
                     if (owner != IntPtr.Zero) {
@@ -146,17 +146,6 @@ namespace StealthPrivesc {
                             result.Owner = Uni(text, 0);
                             Marshal.FreeHGlobal(text);
                         }
-                    }
-                    if (descriptor && info != IntPtr.Zero) {
-                        uint length;
-                        IntPtr slot = Marshal.AllocHGlobal(4);
-                        try {
-                            if (QueryDescriptor(info, out IntPtr data, out length)) {
-                                var blob = new byte[length];
-                                Marshal.Copy(data, blob, 0, (int)length);
-                                result.Descriptor = Convert.ToBase64String(blob);
-                            }
-                        } finally { Marshal.FreeHGlobal(slot); }
                     }
                 }
                 return result;
@@ -169,17 +158,6 @@ namespace StealthPrivesc {
             } finally {
                 if (handle != IntPtr.Zero) { CloseHandle(handle); }
             }
-        }
-        [DllImport("advapi32.dll", SetLastError = true)] static extern bool GetDescriptor(IntPtr source, IntPtr buffer, uint size, out uint returned);
-        internal static bool QueryDescriptor(IntPtr source, out IntPtr data, out uint length) {
-            data = IntPtr.Zero; length = 0;
-            uint returned;
-            if (!GetDescriptor(source, IntPtr.Zero, 0, out returned)) { return false; }
-            length = returned;
-            if (length == 0 || length > 0x200000) { return false; }
-            data = Marshal.AllocHGlobal(length);
-            if (!GetDescriptor(source, data, length, out returned)) { return false; }
-            return true;
         }
     }
 }

@@ -2,7 +2,7 @@ function Add-BrowserSessionEvidence {
     param([string]$Path,[switch]$Firefox)
     $file=Get-Item -LiteralPath $Path -ErrorAction Stop
     if($file.Length-gt$script:Context.MaxFileBytes){Set-CheckPartial 'Browser session file exceeds MaxFileBytes.';return}
-    if(-not('StealthPrivesc.NativeSessions'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'NativeSessions.cs')}
+    if(-not('StealthPrivesc.NativeSessions'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'Native/NativeSessions.cs')}
     try{
         $bytes=[IO.File]::ReadAllBytes($Path)
         if($Firefox){

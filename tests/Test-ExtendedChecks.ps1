@@ -86,11 +86,11 @@ Import-Module (Join-Path $PSScriptRoot '../src/StealthPrivesc.psd1') -Force
         $missing=Get-ReferenceDocument (Join-Path $testRoot 'missing.json') 'Fixture'
         Assert ($null-eq$missing-and$script:Current.Status-eq'Partial') 'Missing reference data is incomplete, never clean.'
         if($env:OS-eq'Windows_NT'){
-            foreach($type in @('Native','NativeObjects','NativeInspection')){if(-not("StealthPrivesc.$type"-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot "$type.cs")}}
+            foreach($type in @('Native','NativeObjects','NativeInspection')){if(-not("StealthPrivesc.$type"-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot "Native/$type.cs")}}
             Add-Type -AssemblyName System.Security
-            Add-Type -Path (Join-Path $script:ModuleRoot 'NativeSecrets.cs')
-            Add-Type -Path (Join-Path $script:ModuleRoot 'NativeSqlite.cs')
-            Add-Type -Path (Join-Path $script:ModuleRoot 'NativeSessions.cs')
+            Add-Type -Path (Join-Path $script:ModuleRoot 'Native/NativeSecrets.cs')
+            Add-Type -Path (Join-Path $script:ModuleRoot 'Native/NativeSqlite.cs')
+            Add-Type -Path (Join-Path $script:ModuleRoot 'Native/NativeSessions.cs')
             $query=[StealthPrivesc.NativeSqlite]::Query(':memory:',"SELECT 'fixture' UNION ALL SELECT 'second'",1,2)
             Assert ($query.Rows.Count-eq1-and$query.Truncated) 'SQLite query results are bounded without copying databases.'
             $failed=$false;try{[StealthPrivesc.NativeSqlite]::Query(':memory:','CREATE TABLE forbidden (id INTEGER)',1,2)|Out-Null}catch{$failed=$true}

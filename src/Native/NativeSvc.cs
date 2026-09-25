@@ -1,95 +1,56 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Runtime.InteropServices;
 
 namespace StealthPrivesc {
     public sealed class Svc {
-        public string Nme, Dsp, Acc, Img, Dsc, Bnp, Lod, Grp, Sid, Tcs, Prc, Pcl, Dps, Dep, Tgr, Rcv;
-        public uint Typ, Str, Err, Sta, Ext, Tag, Wai, Pid, Chk, Fgs, Del, Tru, Prv, Tgg, Fai;
-        public long Tmp;
-        public string[] Req, Deps, Depnd;
+        public string Nme, Dsp, Img, Bnp, Acc, Gr, Dsc;
+        public uint Typ, Str, Sta, Pid;
     }
-    public sealed class SvcResult { public List<Svc> Items = new List<Svc>(); public int Miss, Total; public bool Trunc; }
+    public sealed class SvcResult { public Svc[] Items = new Svc[0]; public int Total, Miss; public bool Trunc; }
     public static class NativeSvc {
         [DllImport("ntdll.dll")] static extern int ZwOpenSCManager(IntPtr attr, IntPtr name, IntPtr sec, out IntPtr ph);
         [DllImport("ntdll.dll")] static extern int ZwEnumServicesStatus(IntPtr scm, uint type, uint state, IntPtr info, uint size, IntPtr offset, IntPtr bytes, IntPtr count);
         [DllImport("ntdll.dll")] static extern int ZwOpenService(IntPtr scm, IntPtr name, IntPtr sec, out IntPtr ph);
-        [DllImport("ntdll.dll")] static extern int ZwQueryServiceConfig(IntPtr svc, IntPtr cfg, uint size, IntPtr buffer, out uint returned, IntPtr needed);
-        [DllImport("ntdll.dll")] static extern int ZwQueryServiceStatus(IntPtr svc, IntPtr status, uint size, IntPtr buffer);
-        [DllImport("ntdll.dll")] static extern int ZwEnumDependentServices(IntPtr svc, IntPtr count, IntPtr info, uint size, IntPtr offset);
         [DllImport("ntdll.dll")] static extern int ZwQueryService(IntPtr svc, uint info, IntPtr buffer, uint size, out uint returned);
         [DllImport("ntdll.dll")] static extern int ZwClose(IntPtr handle);
-        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr RegOpenKeyEx(IntPtr root, string sub, uint opt, uint sam, out IntPtr key);
-        [DllImport("advapi32.dll", CharSet = CharSet.Unicode)] static extern IntPtr RegQueryValueEx(IntPtr key, string val, IntPtr res, ref uint type, IntPtr data, ref uint size);
-        [DllImport("advapi32.dll")] static extern int RegCloseKey(IntPtr key);
-        [DllImport("advapi32.dll", CharSet = CharSet.Unicode)] static extern IntPtr RegEnumKeyEx(IntPtr key, uint index, IntPtr name, ref uint size, IntPtr cls, IntPtr times);
-        [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr pointer);
-        internal static IntPtr Scm(IntPtr sec, out IntPtr handle) {
-            IntPtr memory = NativeSyscall.Attrs;
-            int status = ZwOpenSCManager(memory, IntPtr.Zero, IntPtr.Zero, out handle);
-            if (status != 0) {
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unchecked((int)0xC000000D)) { }
-                if (status != unchecked((int)0xC0000022)) { }
-                if (status != unused(int)0xC000000D)) { }
-            }
-            return IntPtr.Zero;
+        [StructLayout(LayoutKind.Sequential)] public struct Ustr { public ushort Length, Max; public IntPtr Buffer; }
+        [StructLayout(LayoutKind.Sequential)] struct SvcEnum { public Ustr Name, Display; public uint State, Type, Ctrl, Exit, Check, Wait, Pid, Tid; }
+        [StructLayout(LayoutKind.Sequential)] struct SvcConf { public uint Type, Start, Ctrl; public Ustr Name, Binary, Image, Load, Tag; public uint Req; public Ustr Account, Gr; }
+        internal static string U(Ustr s) { return (s.Buffer == IntPtr.Zero || s.Length == 0) ? null : Marshal.PtrToStringUni(s.Buffer, s.Length / 2); }
+        public static SvcResult All(int maximum) {
+            var result = new SvcResult();
+            IntPtr scm;
+            int open = ZwOpenSCManager(NativeSyscall.Attrs, IntPtr.Zero, IntPtr.Zero, out scm);
+            if (open != 0) { result.Miss = open; return result; }
+            IntPtr status = Marshal.AllocHGlobal(0x100);
+            IntPtr conf = Marshal.AllocHGlobal(0x400);
+            var found = new List<Svc>();
+            try {
+                for (uint offset = 0; ; ) {
+                    if (found.Count >= maximum) { result.Trunc = true; break; }
+                    int st = ZwEnumServicesStatus(scm, 0xFFFFFF, 0xFFFFFF, status, 0x100, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+                    if (st == 259) { break; }
+                    if (st != 0) { result.Miss = st; break; }
+                    var item = (SvcEnum)Marshal.PtrToStructure(status, typeof(SvcEnum));
+                    var svc = new Svc { Nme = U(item.Name), Dsp = U(item.Display), Typ = item.Type, Sta = item.State, Pid = item.Pid };
+                    IntPtr service;
+                    if (ZwOpenService(scm, item.Name.Buffer, IntPtr.Zero, out service) == 0 && service != IntPtr.Zero) {
+                        uint returned = 0;
+                        if (ZwQueryService(service, 0, conf, 0x400, out returned) == 0) {
+                            var cfg = (SvcConf)Marshal.PtrToStructure(conf, typeof(SvcConf));
+                            svc.Img = U(cfg.Image); svc.Bnp = U(cfg.Binary); svc.Acc = U(cfg.Account); svc.Gr = U(cfg.Gr); svc.Str = cfg.Start;
+                        }
+                        ZwClose(service);
+                    }
+                    found.Add(svc);
+                    result.Total++;
+                }
+                result.Items = found.ToArray();
+                return result;
+            } finally { ZwClose(scm); Marshal.FreeHGlobal(status); Marshal.FreeHGlobal(conf); }
         }
     }
 }
+
+

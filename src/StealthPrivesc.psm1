@@ -60,7 +60,7 @@ function Invoke-StealthPrivesc {
         foreach ($nativeType in @('Native','NativeInspection','NativeObjects')) {
             if (-not ("StealthPrivesc.$nativeType" -as [type])) {
                 Write-Verbose "Loading native support: $nativeType"
-                Add-Type -Path (Join-Path $script:ModuleRoot "$nativeType.cs") -ErrorAction Stop
+                Add-Type -Path (Join-Path $script:ModuleRoot "Native/$nativeType.cs") -ErrorAction Stop
             }
         }
         $identity = [Security.Principal.WindowsIdentity]::GetCurrent()

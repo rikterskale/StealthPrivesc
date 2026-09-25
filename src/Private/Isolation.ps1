@@ -1,7 +1,7 @@
 function Invoke-IsolatedNativeQuery {
     param([ValidateSet('Pipe','Device')][string]$Kind,[string]$Target)
     # Driver and pipe open callbacks can block in third-party code. Keep them outside the scanner process.
-    $payload=@{Kind=$Kind;Target=$Target;Source=(Join-Path $script:ModuleRoot 'NativeObjects.cs')}|ConvertTo-Json -Compress
+    $payload=@{Kind=$Kind;Target=$Target;Source=(Join-Path $script:ModuleRoot 'Native/NativeObjects.cs')}|ConvertTo-Json -Compress
     $payload64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload))
     $code=@'
 $ErrorActionPreference='Stop'

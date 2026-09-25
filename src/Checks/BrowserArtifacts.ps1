@@ -1,7 +1,7 @@
 function Invoke-ProfileDatabaseQuery {
     param([string]$Path,[string]$Query)
     if(-not(Test-AllowedLocalPath $Path)-or(Get-FilePresence $Path)-ne'Present'){return}
-    if(-not('StealthPrivesc.NativeSqlite'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'NativeSqlite.cs')}
+    if(-not('StealthPrivesc.NativeSqlite'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'Native/NativeSqlite.cs')}
     try{$result=[StealthPrivesc.NativeSqlite]::Query($Path,$Query,$script:Context.MaxItems,$script:Context.CommandTimeoutSeconds);if($result.Truncated){Set-CheckPartial 'Browser database results exceeded MaxItems.'};return ,$result.Rows}
     catch{Set-CheckPartial "Read-only browser database query failed (locked, schema or platform unavailable): $Path" -ErrorRecord $_}
 }
@@ -13,7 +13,7 @@ function Get-RedactedUrl {
 function Invoke-BrowserArtifactCheck {
     param([int]$Id)
     if($Id-eq136){$path='HKCU:\Software\Microsoft\Internet Explorer\TypedURLs';try{$key=Get-Item -LiteralPath $path -ErrorAction Stop;try{foreach($name in $key.GetValueNames()){Add-Evidence ($path+'/'+$name) 'Typed URL registry entry; path/query redacted.' (Get-RedactedUrl ([string]$key.GetValue($name)))}}finally{$key.Close()}}catch [System.Management.Automation.ItemNotFoundException]{}}
-    if($Id-eq98-and-not('StealthPrivesc.NativeSecrets'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'NativeSecrets.cs')}
+    if($Id-eq98-and-not('StealthPrivesc.NativeSecrets'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'Native/NativeSecrets.cs')}
     foreach($profile in Get-ProfileRoots){
         foreach($root in @("$profile\AppData\Local\Google\Chrome\User Data","$profile\AppData\Local\Microsoft\Edge\User Data","$profile\AppData\Local\BraveSoftware\Brave-Browser\User Data","$profile\AppData\Roaming\Opera Software")){
             $protectedKey=$null

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>scanner</AssemblyName>
+    <RootNamespace>StealthScanner</RootNamespace>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <DebugType>none</DebugType>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <OutputPath>..\dist\</OutputPath>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <RuntimeIdentifierBasePath>runtimes\win</RuntimeIdentifierBasePath>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="microsoft.wsman.management" Version="7.4.20" />
+    <PackageReference Include="microsoft.powershell.consolehost" Version="7.4.20" />
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="8.0.1" />
+    <PackageReference Include="System.Management.Automation" Version="7.4.20" />
+    <PackageReference Include="microsoft.powershell.commands.diagnostics" Version="7.4.20" />
+    <PackageReference Include="microsoft.powershell.commands.management" Version="7.4.20" />
+    <PackageReference Include="microsoft.powershell.consolehost" Version="7.4.20" />
+    <PackageReference Include="microsoft.powershell.commands.utility" Version="7.4.20" />
+    <PackageReference Include="microsoft.powershell.consolehost" Version="7.4.20" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\src\**\*" LogicalName="sp\%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\data\checks.json" LogicalName="sp\data\checks.json" />
+    <EmbeddedResource Include="..\data\reference\*.json" LogicalName="sp\data\reference\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\dist\stealthnative.dll" LogicalName="sp\stealthnative.dll" />
+  </ItemGroup>
+</Project>
