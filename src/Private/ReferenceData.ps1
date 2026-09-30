@@ -6,11 +6,49 @@ function Get-ReferenceDocument {
         if($file.Length-gt100MB){throw 'Reference document exceeds size limit.'}
         $document=Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json -ErrorAction Stop
         if($document.SchemaVersion-ne1-or-not$document.PSObject.Properties['Entries']){throw 'Unsupported reference schema.'}
-        $retrieved=[DateTimeOffset]::Parse($document.RetrievedUtc,[Globalization.CultureInfo]::InvariantCulture)
-        Add-Evidence $file.FullName "$Kind reference snapshot." @{Source=$document.Source;RetrievedUtc=$document.RetrievedUtc;Entries=@($document.Entries).Count;SHA256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash}
+        $retrieved=ConvertTo-ReferenceDate $document.RetrievedUtc
+        $evidence = @{Source=$document.Source;RetrievedUtc=$document.RetrievedUtc;Entries=@($document.Entries).Count;SHA256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash}
+        if ($Kind -eq 'MSRC') {
+            $evidence.Coverage = Get-ReferenceMonthCoverage -Document $document
+            if ($evidence.Coverage.MissingMonths.Count) { Set-CheckPartial 'MSRC snapshot has gaps between its included months; CVEs from omitted periods were not assessed.' }
+            if (-not $evidence.Coverage.Months.Count) { Set-CheckPartial 'MSRC snapshot does not declare valid included months; historical coverage is unknown.' }
+            if ($document.PSObject.Properties['MonthRetrievedUtc']) {
+                foreach($period in $document.MonthRetrievedUtc.PSObject.Properties){
+                    if(([DateTimeOffset]::UtcNow-(ConvertTo-ReferenceDate $period.Value)).TotalDays -gt 30){Set-CheckPartial 'Some retained MSRC source months were last retrieved more than 30 days ago; updating recent months does not refresh historical records.';break}
+                }
+                $evidence.Coverage | Add-Member -NotePropertyName MonthRetrievedUtc -NotePropertyValue $document.MonthRetrievedUtc
+            }
+        }
+        Add-Evidence $file.FullName "$Kind reference snapshot." $evidence
         if(([DateTimeOffset]::UtcNow-$retrieved).TotalDays-gt30){Set-CheckPartial "$Kind reference data is older than 30 days."}
         return $document
     }catch{Set-CheckPartial "$Kind reference data is missing or invalid. Run tools/Update-ReferenceData.ps1 or supply a validated reference path." -ErrorRecord $_;return $null}
+}
+function ConvertTo-ReferenceDate {
+    param([object]$Value)
+    if($Value -is [DateTimeOffset]){return $Value}
+    if($Value -is [DateTime]){return [DateTimeOffset]::new($Value)}
+    [DateTimeOffset]::Parse([string]$Value,[Globalization.CultureInfo]::InvariantCulture)
+}
+function Get-ReferenceMonthCoverage {
+    param([object]$Document)
+    $months = @()
+    if ($Document.PSObject.Properties['Months']) {
+        $months = @(foreach ($month in $Document.Months) {
+            if ([string]$month -notmatch '^20\d\d-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$') { throw 'Invalid reference month.' }
+            [DateTime]::ParseExact([string]$month,'yyyy-MMM',[Globalization.CultureInfo]::InvariantCulture)
+        }) | Sort-Object -Unique
+    }
+    $months = @($months)
+    $included = @($months | ForEach-Object { $_.ToString('yyyy-MMM',[Globalization.CultureInfo]::InvariantCulture) })
+    $missing = @()
+    if ($months.Count) {
+        for ($month = $months[0]; $month -le $months[-1]; $month = $month.AddMonths(1)) {
+            $name = $month.ToString('yyyy-MMM',[Globalization.CultureInfo]::InvariantCulture)
+            if ($name -notin $included) { $missing += $name }
+        }
+    }
+    [pscustomobject]@{Kind='SelectedMonths';Months=$included;MissingMonths=$missing;Notice='Included months describe source periods, not complete CVE applicability or coverage before/after these periods.'}
 }
 function Get-WindowsVersionContext {
     $os=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop

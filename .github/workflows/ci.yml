@@ -39,7 +39,7 @@ jobs:
           "$RUNNER_TEMP/actionlint" -color
 
   windows:
-    name: Tests (${{ matrix.os }}, PowerShell 5.1 + 7)
+    name: Tests (${{ matrix.os }}, PowerShell 5.1 + 7, x86 + x64)
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
@@ -55,9 +55,10 @@ jobs:
           persist-credentials: false
       - name: Run complete validation matrix
         run: |
+          $x86 = & ./tools/Get-TestPowerShell.ps1 -Architecture x86 -DestinationDirectory "$env:RUNNER_TEMP/stealthprivesc-runtimes"
           New-Item -ItemType Directory -Path TestResults/ci -Force | Out-Null
           "Commit: $env:GITHUB_SHA; runner image: $env:ImageOS $env:ImageVersion" | Tee-Object -FilePath TestResults/ci/validation.log
-          & pwsh -NoLogo -NoProfile -NonInteractive -File ./tools/Test-Project.ps1 -ResultsDirectory ./TestResults/ci 2>&1 |
+          & pwsh -NoLogo -NoProfile -NonInteractive -File ./tools/Test-Project.ps1 -PowerShell7X86Path $x86 -ResultsDirectory ./TestResults/ci 2>&1 |
             Tee-Object -FilePath TestResults/ci/validation.log -Append
           if ($LASTEXITCODE -ne 0) { throw "Validation exited $LASTEXITCODE. See validation.log for details." }
       - name: Publish validation summary

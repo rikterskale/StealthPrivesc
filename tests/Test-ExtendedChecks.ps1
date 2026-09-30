@@ -101,15 +101,21 @@ Import-Module (Join-Path $PSScriptRoot '../src/StealthPrivesc.psd1') -Force
             $failed=$false;try{[StealthPrivesc.NativeSessions]::Firefox($frame,5)|Out-Null}catch{$failed=$true}
             Assert $failed 'Firefox decompression rejects output exceeding the configured cap.'
             $plain=[Text.Encoding]::UTF8.GetBytes('synthetic fixture password')
-            $encrypted=[Security.Cryptography.ProtectedData]::Protect($plain,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)
+            $key=New-Object byte[] 16;$dpapiFailure=$null
+            try {
+                $encrypted=[Security.Cryptography.ProtectedData]::Protect($plain,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)
+                $wrapped=[Text.Encoding]::ASCII.GetBytes('DPAPI')+[Security.Cryptography.ProtectedData]::Protect($key,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)
+            } catch { $dpapiFailure=$_.Exception.GetBaseException().GetType().Name }
+            if(-not $dpapiFailure){
             $probe=[StealthPrivesc.NativeSecrets]::Browser($null,$encrypted)
             Assert ($probe.Recovered-and$probe.Value-eq'[REDACTED]') 'A synthetic DPAPI password is recoverable without returning its value.'
-            $key=New-Object byte[] 16;$wrapped=[Text.Encoding]::ASCII.GetBytes('DPAPI')+[Security.Cryptography.ProtectedData]::Protect($key,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)
             $hex='0388dace60b6a392f328c2b971b2fe78ab6e47d42cec13bdf53a67b21257bddf';$cipher=New-Object byte[] 32;for($j=0;$j-lt32;$j++){$cipher[$j]=[Convert]::ToByte($hex.Substring($j*2,2),16)}
             $blob=[Text.Encoding]::ASCII.GetBytes('v10')+(New-Object byte[] 12)+$cipher
             Assert ([StealthPrivesc.NativeSecrets]::Browser($wrapped,$blob).Recovered) 'Known AES-GCM fixture authenticates through DPAPI-wrapped browser key.'
             $blob[$blob.Length-1]=$blob[$blob.Length-1]-bxor1
             Assert (-not[StealthPrivesc.NativeSecrets]::Browser($wrapped,$blob).Recovered) 'A modified GCM authentication tag never reports recovery.'
+            } else { Write-Warning "INCOMPLETE: DPAPI fixtures require a loaded user profile ($dpapiFailure). Continuing independent assertions; this suite will exit nonzero." }
+            [Array]::Clear($plain,0,$plain.Length);[Array]::Clear($key,0,$key.Length)
             $class=[Guid]::NewGuid();$property=[Guid]::NewGuid()
             $sd=New-Object Security.AccessControl.RawSecurityDescriptor("O:SYG:SYD:(OA;;WP;$property;;WD)")
             $bytes=New-Object byte[] $sd.BinaryLength;$sd.GetBinaryForm($bytes,0)
@@ -130,6 +136,7 @@ Import-Module (Join-Path $PSScriptRoot '../src/StealthPrivesc.psd1') -Force
             $missing=[StealthPrivesc.NativeObjects]::Security('\StealthPrivescMissing-'+[Guid]::NewGuid().ToString('N'),$true)
             Assert ($missing.Status-ne0-and$null-eq$missing.Descriptor) 'Missing native objects return errors, not a permissive descriptor.'
         }
+        if($dpapiFailure){throw 'Extended validation is incomplete: DPAPI fixtures could not run. Rerun under a logged-in user with a loaded profile.'}
         Write-Host "PASS: $script:ExtendedAssertions extended assertions; skipped test groups: 0."
     }finally{
         $resolved=[IO.Path]::GetFullPath($testRoot)

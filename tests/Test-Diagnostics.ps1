@@ -162,10 +162,10 @@ Import-Module (Join-Path $PSScriptRoot '../src/StealthPrivesc.psd1') -Force
         $missingRuntimeCode = '$env:PATH=""; $env:ProgramFiles=''' + $missingRoot + '''; $env:ProgramW6432=''' + $missingRoot + '''; $env:WINDIR=''' + $missingRoot + '''; & ''' + $runnerPath + ''' -ResultsDirectory ''' + $missingResults.Replace("'", "''") + ''''
         $encodedMissingRuntime = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($missingRuntimeCode))
         $missingRuntime = Invoke-DiagnosticTestProcess "-NoLogo -NoProfile -NonInteractive -OutputFormat Text -EncodedCommand $encodedMissingRuntime"
-        Assert-Diagnostic ($missingRuntime.ExitCode -eq 1 -and $missingRuntime.Output -match 'Test suites not run: 12 of 12') 'Missing runtimes report every unrun suite and fail validation.'
-        Assert-Diagnostic ($missingRuntime.Output -match 'Next action: Install or enable 64-bit' -and $missingRuntime.Output -notmatch 'Validation passed:') 'Missing-runtime output provides a fix instead of a misleading pass.'
+        Assert-Diagnostic ($missingRuntime.ExitCode -eq 1 -and $missingRuntime.Output -match 'Test suites not run: 30 of 30') 'Missing runtimes report every unrun suite and fail validation.'
+        Assert-Diagnostic ($missingRuntime.Output -match 'Next action: Install or provide' -and $missingRuntime.Output -notmatch 'Validation passed:') 'Missing-runtime output provides a fix instead of a misleading pass.'
         $missingSummary = Get-Content -LiteralPath (Join-Path $missingResults 'validation.json') -Raw | ConvertFrom-Json
-        Assert-Diagnostic ($missingSummary.Expected -eq 12 -and $missingSummary.NotRun -eq 12 -and $missingSummary.Passed -eq 0 -and $missingSummary.Results.Count -eq 12) 'Machine-readable CI results count every missing runtime/suite combination.'
+        Assert-Diagnostic ($missingSummary.Expected -eq 30 -and $missingSummary.NotRun -eq 30 -and $missingSummary.Passed -eq 0 -and $missingSummary.Results.Count -eq 30) 'Machine-readable CI results count every missing runtime/suite combination.'
         Assert-Diagnostic (@($missingSummary.Results | Where-Object { $_.Status -ne 'NOT RUN' -or $_.Command }).Count -eq 0) 'Missing runtimes never claim an executed command or a passing result.'
 
         $verboseStream = @(Invoke-StealthPrivesc -CheckId 1,2 -PassThru -Verbose 4>&1 3>$null)
@@ -231,6 +231,19 @@ Import-Module (Join-Path $PSScriptRoot '../src/StealthPrivesc.psd1') -Force
             Assert-Diagnostic ($visible -match '\[Skipped\] Check 70') 'Skip reasons cannot be hidden behind the three-warning display limit.'
         }
 
+        & {
+            function Invoke-Check { param([int]$Id) Add-Evidence 'Fixture' 'Synthetic export regression evidence.' }
+            function ConvertTo-AttackPathHtml { param($Analysis) throw [IO.IOException]::new('NEVER_DISCLOSE_DIAGNOSTIC_SECRET_7391') }
+            $output = Join-Path $testRoot 'html-export-failure'
+            $fatal = $null
+            try { Invoke-StealthPrivesc -CheckId 1 -OutputDirectory $output -PassThru 3>$null }
+            catch { $fatal = $_ }
+            $saved = Get-Content (Get-ChildItem -LiteralPath $output -Filter '*.json').FullName -Raw | ConvertFrom-Json
+            Assert-Diagnostic ($fatal -and $saved.RunStatus -eq 'Failed' -and $saved.Checks.Count -eq 1) 'HTML failure updates persisted JSON while preserving findings.'
+            Assert-Diagnostic (@($saved.Diagnostics | Where-Object Phase -eq Export).Count -eq 1) 'Persisted JSON contains the final export diagnostic.'
+            Assert-Diagnostic (($saved | ConvertTo-Json -Depth 16) -notmatch $canary) 'Export recovery retains safe diagnostics only.'
+            Assert-Diagnostic (@(Get-ChildItem -LiteralPath $output -Filter '*.tmp').Count -eq 0) 'Atomic JSON export leaves no temporary files.'
+        }
         function Export-Assessment { throw [IO.IOException]::new('NEVER_DISCLOSE_DIAGNOSTIC_SECRET_7391') }
         $fatal = $null
         try { Invoke-StealthPrivesc -CheckId 1,2 -OutputDirectory (Join-Path $testRoot 'export-failure') -PassThru 3>$null }

@@ -38,10 +38,12 @@ function Invoke-StealthPrivesc {
     $script:RunDiagnostics = New-Object 'System.Collections.Generic.List[object]'
     $identity = $null; $paths = $null; $failure = $null; $phase = 'Selection'
     $report = [ordered]@{
-        SchemaVersion = '1.5'; ToolVersion = '0.2.0'; StartedUtc = [DateTime]::UtcNow.ToString('o')
+        SchemaVersion = '1.5'; ToolVersion = '0.2.1'; StartedUtc = [DateTime]::UtcNow.ToString('o')
         RunStatus = 'Running'; Computer = $env:COMPUTERNAME; User = $null; UserSid = $null
         Elevated = $null; ProcessArchitecture = $(if ([Environment]::Is64BitProcess) { 'x64' } else { 'x86' })
         PowerShellVersion = $PSVersionTable.PSVersion.ToString()
+        OperatingSystemArchitecture = $(if ([Environment]::Is64BitOperatingSystem) { 'x64' } else { 'x86' })
+        CollectionView = $(if ([Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) { 'WOW64: registry and filesystem redirection apply; use x64 PowerShell for native system coverage.' } else { 'Native process registry and filesystem view.' })
         Scope = [ordered]@{ Network = [bool]$IncludeNetwork; Domain = [bool]$IncludeDomain; Sensitive = [bool]$IncludeSensitive; MaxItems = $MaxItems; MaxFileBytes = $MaxFileBytes; CommandTimeoutSeconds = $CommandTimeoutSeconds }
         Notice = 'Evidence is redacted. Findings are candidates unless explicitly stated; access tests use the current token. Missing evidence is not a clean bill of health.'
         Checks = New-Object 'System.Collections.Generic.List[object]'
@@ -135,6 +137,15 @@ function Invoke-StealthPrivesc {
             Write-DiagnosticLog $failure
             Write-Warning (Format-AssessmentDiagnostic $failure) -WarningAction Continue
             $report.RunStatus = 'Failed'
+            # HTML may fail after JSON was saved. Persist the final failure state
+            # without trying the failing HTML renderer again.
+            try { Save-AssessmentJson -Report $report -Path $paths.Json }
+            catch {
+                $recovery = New-AssessmentDiagnostic -Reason 'The failed report could not be saved to JSON. Existing report files may predate this export failure; retain AssessmentReport from the terminating exception.' -ErrorRecord $_ -Level Error -Phase Export
+                $script:RunDiagnostics.Add($recovery)
+                Write-DiagnosticLog $recovery
+                Write-Warning (Format-AssessmentDiagnostic $recovery) -WarningAction Continue
+            }
         }
     }
     $script:DiagnosticLogPath = $null

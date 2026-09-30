@@ -86,6 +86,10 @@ function New-AssessmentDiagnostic {
         $code = 'FileSizeLimit'
         $explanation = 'A file or decoded content exceeded a collector size limit.'
         $steps = @('For a MaxFileBytes limit, retry with -MaxFileBytes 2097152 (maximum 10485760). Larger limits increase resource use.', 'Some parser/decompression limits are fixed and cannot be changed with MaxFileBytes; retain those as incomplete coverage.')
+    } elseif ($Reason -match '^Intentional domain sampling:') {
+        $code = 'SampledCoverage'
+        $explanation = 'The collector completed a bounded domain sample. Partial is intentional and does not by itself indicate a failed query.'
+        $steps = @('Review the sampled evidence and any separate operational diagnostics.', 'Use a domain-wide assessment method when comprehensive assurance is required; increasing MaxItems only expands this sample.')
     } elseif ($Reason -match 'MaxItems|item limit|finding limit|truncat|enumeration.*limit|item/time budget') {
         $code = 'ItemLimit'
         $explanation = 'The collector stopped at an item limit, so some results were omitted.'
@@ -149,7 +153,7 @@ function New-AssessmentDiagnostic {
                 $steps = @('Resolve the prerequisite described in the skip reason, then retry this check. If the requirement cannot be met on this computer, retain the skipped result.')
             }
         }
-        $verification = 'After rerunning, confirm this check has Status = Completed. Partial means coverage is still incomplete; follow its diagnostics. Error means it ran but failed. Skipped means another prerequisite still needs attention.'
+        $verification = 'After rerunning, confirm the collector started. Status = Completed means collection finished within its declared scope. Partial may be intentional sampling or an operational limitation; inspect its diagnostics to distinguish them. Error means it ran but failed. Skipped means another prerequisite still needs attention.'
         if ($SkipReason -eq 'UnsupportedCheck') { $verification = 'Confirm that the replacement version or assessment method actually implements and completes this check. Unsupported is not a successful result.' }
     }
     if ($code -eq 'ScopeNotEnabled' -and -not $RequiredSwitch -and $Reason -match '-(IncludeDomain|IncludeNetwork|IncludeSensitive)') { $RequiredSwitch = $Matches[1] }

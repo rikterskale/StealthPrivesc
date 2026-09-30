@@ -55,8 +55,8 @@ function Get-Cached {
     }
     $script:Context.Cache[$Key].Data
 }
-function Get-Services { Get-Cached 'Services' { Add-CheckCommand PowerShell 'Get-CimInstance Win32_Service -ErrorAction Stop'; Get-CimInstance Win32_Service -ErrorAction Stop | Select-Object Name,DisplayName,PathName,StartName,StartMode,State,ProcessId } }
-function Get-Tasks { Get-Cached 'Tasks' { Add-CheckCommand PowerShell 'Get-ScheduledTask -ErrorAction Stop'; Get-ScheduledTask -ErrorAction Stop } }
+function Get-Services { Get-Cached 'Services' { Add-CheckCommand PowerShell "Get-CimInstance Win32_Service -OperationTimeoutSec $($script:Context.CommandTimeoutSeconds) -ErrorAction Stop | Select-Object -First $($script:Context.MaxItems+1)"; Get-Limited @(Get-CimInstance Win32_Service -OperationTimeoutSec $script:Context.CommandTimeoutSeconds -ErrorAction Stop | Select-Object -First ($script:Context.MaxItems+1) | Select-Object Name,DisplayName,PathName,StartName,StartMode,State,ProcessId) } }
+function Get-Tasks { Get-Cached 'Tasks' { Add-CheckCommand PowerShell "Get-ScheduledTask -ErrorAction Stop | Select-Object -First $($script:Context.MaxItems+1)"; Get-Limited @(Get-ScheduledTask -ErrorAction Stop | Select-Object -First ($script:Context.MaxItems+1)) } }
 function Get-Applications {
     Get-Cached 'Applications' {
         foreach ($root in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall','HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall')) {
@@ -196,28 +196,8 @@ function Invoke-ReadOnlyCommand {
     param([string]$FileName, [string]$Arguments)
     $recordedArguments = Get-HelperVerificationArguments $FileName $Arguments
     Add-CheckCommand Process (('& ' + (ConvertTo-VerificationLiteral $FileName) + ' ' + $recordedArguments).TrimEnd()) -Detail 'ProcessStartInfo invocation with UseShellExecute=false, displayed in PowerShell syntax for manual use. Arguments are verbatim only for known fixed queries; other payloads are redacted. A start failure, nonzero exit or timeout is reported in Diagnostics.'
-    $info=New-Object Diagnostics.ProcessStartInfo
-    $info.FileName=$FileName; $info.Arguments=$Arguments; $info.UseShellExecute=$false; $info.CreateNoWindow=$true
-    $info.RedirectStandardOutput=$true; $info.RedirectStandardError=$true
-    $process=New-Object Diagnostics.Process
-    $process.StartInfo=$info
-    try {
-        [void]$process.Start()
-        $stdout=$process.StandardOutput.ReadToEndAsync(); $stderr=$process.StandardError.ReadToEndAsync()
-        if(-not $process.WaitForExit($script:Context.CommandTimeoutSeconds*1000)){
-            $failure = [TimeoutException]::new('Read-only helper exceeded its time limit.')
-            $failure.Data['StealthPrivesc.TimeoutSeconds'] = [int]$script:Context.CommandTimeoutSeconds
-            # Preserve the timeout diagnosis if the process exits while being killed.
-            try { $process.Kill() } catch [InvalidOperationException] { }
-            throw $failure
-        }
-        if($process.ExitCode -ne 0){
-            $failure = [InvalidOperationException]::new('Read-only helper returned a nonzero exit code.')
-            $failure.Data['StealthPrivesc.ExitCode'] = [int]$process.ExitCode
-            throw $failure
-        }
-        $stdout.GetAwaiter().GetResult()
-    } finally { $process.Dispose() }
+    if(-not('StealthPrivesc.NativeProcess'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'NativeProcess.cs') -ErrorAction Stop}
+    [StealthPrivesc.NativeProcess]::Run($FileName,$Arguments,$script:Context.CommandTimeoutSeconds,8MB)
 }
 function Find-SecretMarkers {
     param([string]$Path)
@@ -269,10 +249,12 @@ function Export-Assessment {
     if (-not $Paths) { $Paths = Initialize-AssessmentOutput -Directory $Directory }
     $jsonPath=$Paths.Json
     $htmlPath=$Paths.Html
-    $Report | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $jsonPath -Encoding UTF8
+    Save-AssessmentJson -Report $Report -Path $jsonPath
     $html=New-Object Text.StringBuilder
     [void]$html.Append('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Windows exposure assessment</title><style>body{font:16px system-ui;max-width:1100px;margin:40px auto;padding:0 24px;background:#101820;color:#e5edf3}h1,h2{color:#82d4d4}article{border:1px solid #38505c;padding:16px;margin:16px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere}small{color:#b9cbd5}.High,.Medium{border-left:4px solid #ffbd69}summary{cursor:pointer}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #38505c}</style><h1>Windows exposure assessment</h1>')
     [void]$html.Append('<p>'+[Net.WebUtility]::HtmlEncode($Report.Notice)+'</p><p>'+[Net.WebUtility]::HtmlEncode("$($Report.Computer) | $($Report.User) | Elevated: $($Report.Elevated) | $($Report.StartedUtc)")+'</p>')
+    $view=Get-AttackPathValue $Report 'CollectionView'
+    if($view){[void]$html.Append('<p><strong>Collection view:</strong> '+[Net.WebUtility]::HtmlEncode($view)+'</p>')}
     [void]$html.Append('<section aria-labelledby="status-summary"><h2 id="status-summary">Check status summary</h2><table><thead><tr><th scope="col">Status</th><th scope="col">Count</th></tr></thead><tbody>')
     foreach($status in @('Completed','Partial','Skipped','Unsupported','Error')){
         $count=$Report.Summary[$status]
@@ -318,6 +300,18 @@ function Export-Assessment {
     [IO.File]::WriteAllText($htmlPath,$html.ToString())
     Write-Host "Reports: $jsonPath and $htmlPath"
     Write-Host "Troubleshooting log: $($Paths.Log)"
+}
+
+function Save-AssessmentJson {
+    param([object]$Report,[string]$Path)
+    # Replace only after serialization and the complete write succeed.
+    $temporary = $Path + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
+    try {
+        $Report | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $temporary -Encoding UTF8 -ErrorAction Stop
+        Move-Item -LiteralPath $temporary -Destination $Path -Force -ErrorAction Stop
+    } finally {
+        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
+    }
 }
 function Read-SafeXml {
     param([string]$Path)

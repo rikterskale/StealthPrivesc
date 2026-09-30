@@ -49,7 +49,7 @@ function Invoke-DomainCheck {
             }
         }
     }
-    Set-CheckPartial 'Domain queries are bounded by MaxItems; this is a sample, not a domain-wide assurance result.'
+    if ($Id -ne 142) { Set-CheckPartial 'Intentional domain sampling: queries are bounded by MaxItems; this is not a domain-wide assurance result.' }
 }
 function Add-ADControlEvidence {
     param([object]$Object)

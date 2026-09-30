@@ -6,18 +6,20 @@ using System.Text;
 namespace StealthPrivesc {
     public sealed class SqliteResult {public string[][] Rows; public bool Truncated;}
     public static class NativeSqlite {
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate int Progress(IntPtr context);
-        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.Cdecl)] static extern int sqlite3_open_v2(byte[] path,out IntPtr db,int flags,IntPtr vfs);
-        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.Cdecl)] static extern int sqlite3_close(IntPtr db);
-        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.Cdecl)] static extern int sqlite3_busy_timeout(IntPtr db,int milliseconds);
-        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.Cdecl)] static extern void sqlite3_progress_handler(IntPtr db,int instructions,Progress callback,IntPtr context);
-        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.Cdecl)] static extern int sqlite3_prepare_v2(IntPtr db,byte[] sql,int bytes,out IntPtr statement,IntPtr tail);
-        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.Cdecl)] static extern int sqlite3_stmt_readonly(IntPtr statement);
-        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.Cdecl)] static extern int sqlite3_step(IntPtr statement);
-        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.Cdecl)] static extern int sqlite3_finalize(IntPtr statement);
-        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.Cdecl)] static extern int sqlite3_column_count(IntPtr statement);
-        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.Cdecl)] static extern IntPtr sqlite3_column_text(IntPtr statement,int column);
-        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.Cdecl)] static extern int sqlite3_column_bytes(IntPtr statement,int column);
+        // Windows SDK winsqlite3.h defines SQLITE_STDCALL and SQLITE_CALLBACK
+        // as __stdcall. Cdecl corrupts the stack in x86 Windows PowerShell.
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Progress(IntPtr context);
+        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.StdCall)] static extern int sqlite3_open_v2(byte[] path,out IntPtr db,int flags,IntPtr vfs);
+        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.StdCall)] static extern int sqlite3_close(IntPtr db);
+        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.StdCall)] static extern int sqlite3_busy_timeout(IntPtr db,int milliseconds);
+        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.StdCall)] static extern void sqlite3_progress_handler(IntPtr db,int instructions,Progress callback,IntPtr context);
+        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.StdCall)] static extern int sqlite3_prepare_v2(IntPtr db,byte[] sql,int bytes,out IntPtr statement,IntPtr tail);
+        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.StdCall)] static extern int sqlite3_stmt_readonly(IntPtr statement);
+        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.StdCall)] static extern int sqlite3_step(IntPtr statement);
+        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.StdCall)] static extern int sqlite3_finalize(IntPtr statement);
+        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.StdCall)] static extern int sqlite3_column_count(IntPtr statement);
+        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.StdCall)] static extern IntPtr sqlite3_column_text(IntPtr statement,int column);
+        [DllImport("winsqlite3.dll",CallingConvention=CallingConvention.StdCall)] static extern int sqlite3_column_bytes(IntPtr statement,int column);
         public static SqliteResult Query(string path,string query,int maximum,int seconds){
             IntPtr db=IntPtr.Zero,statement=IntPtr.Zero;var watch=Stopwatch.StartNew();Progress callback=delegate(IntPtr p){return watch.Elapsed.TotalSeconds>seconds?1:0;};
             try{

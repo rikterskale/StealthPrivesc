@@ -5,6 +5,7 @@ param(
     [switch]$WindowsUpdates,
     [switch]$Lolbas,
     [string[]]$Month,
+    [switch]$ReplaceWindowsSnapshot,
     [string]$OutputDirectory=(Join-Path $PSScriptRoot '../data/reference')
 )
 $ErrorActionPreference='Stop'
@@ -52,6 +53,17 @@ if($Drivers){
 if($WindowsUpdates){
     if(-not$Month){$Month=@(0..2|ForEach-Object{(Get-Date).AddMonths(-$_).ToString('yyyy-MMM',[Globalization.CultureInfo]::InvariantCulture)})}
     $entries=New-Object 'System.Collections.Generic.List[object]'
+    $retainedMonths=@();$monthRetrieval=@{}
+    $snapshotPath=Join-Path $OutputDirectory 'windows-updates.json'
+    if(-not $ReplaceWindowsSnapshot -and (Test-Path -LiteralPath $snapshotPath)) {
+        $previous=Get-Content -LiteralPath $snapshotPath -Raw | ConvertFrom-Json -AsHashtable
+        if($previous.SchemaVersion -ne 1 -or -not $previous.ContainsKey('Entries') -or -not $previous.ContainsKey('Months')){throw 'Cannot merge an invalid previous Windows snapshot. Validate it or explicitly use -ReplaceWindowsSnapshot.'}
+        $retainedMonths=@($previous.Months | Where-Object {$_ -notin $Month})
+        foreach($entry in $previous.Entries){if($entry.Month -notin $Month){$entries.Add($entry)}}
+        foreach($period in $retainedMonths){
+            $monthRetrieval[$period]=if($previous.ContainsKey('MonthRetrievedUtc') -and $previous.MonthRetrievedUtc.ContainsKey($period)){$previous.MonthRetrievedUtc[$period]}else{$previous.RetrievedUtc}
+        }
+    }
     $legacyCves=@('CVE-2019-0836','CVE-2019-0841','CVE-2019-1064','CVE-2019-1130','CVE-2019-1253','CVE-2019-1315','CVE-2019-1385','CVE-2019-1388','CVE-2019-1405','CVE-2020-0668','CVE-2020-0683','CVE-2020-1013')
     $kbBuilds=@{}
     $kbCachePath=Join-Path $OutputDirectory 'kb-builds.json'
@@ -99,8 +111,9 @@ if($WindowsUpdates){
             }
         }
         Write-Host "Imported $period"
+        $monthRetrieval[$period]=[DateTime]::UtcNow.ToString('o')
     }
     if(-not$entries.Count){throw 'No Windows OS fixed-build records were returned; previous reference data retained.'}
     $unique=@($entries|ForEach-Object{[pscustomobject]$_}|Sort-Object Cve,ProductId,FixedBuild -Unique)
-    Save-Reference 'windows-updates.json' ([ordered]@{SchemaVersion=1;Source='Microsoft Security Response Center CVRF v3';RetrievedUtc=[DateTime]::UtcNow.ToString('o');Months=$Month;Entries=$unique})
+    Save-Reference 'windows-updates.json' ([ordered]@{SchemaVersion=1;Source='Microsoft Security Response Center CVRF v3';RetrievedUtc=[DateTime]::UtcNow.ToString('o');Months=@(@($retainedMonths)+@($Month)|Sort-Object -Unique);MonthRetrievedUtc=$monthRetrieval;Entries=$unique})
 }

@@ -4,7 +4,7 @@ A read-only Windows privilege-escalation exposure scanner. It gathers evidence w
 
 ## Quick start
 
-On **64-bit Windows 11 or Windows Server 2019/2022/2025**, use **Windows PowerShell 5.1 or PowerShell 7**. First, clone the project if needed; then run the scan from the repository folder:
+On **Windows 11 or Windows Server 2019/2022/2025**, use **Windows PowerShell 5.1 or PowerShell 7**. Native x64 PowerShell is recommended for system-wide coverage; x86 PowerShell runs under WOW64 with redirected collection views disclosed in reports. These operating systems require a 64-bit OS. First, clone the project if needed; then run the scan from the repository folder:
 
 If you have not downloaded the project yet:
 
@@ -154,7 +154,7 @@ Each skipped check includes a retry selector with its required opt-in and any sc
 .\Invoke-StealthPrivesc.ps1 -CheckId 70 -IncludeDomain -OutputDirectory .\reports -Verbose
 ```
 
-After rerunning, verify `Status` is `Completed`. If it is still `Skipped`, resolve the next reported prerequisite. `Partial` means some collection remains incomplete, and `Error` means it ran but failed; follow those diagnostics. No command can guarantee completion on a system that lacks the required environment. The scanner reports these requirements and does not enable scopes, install tools, or join a domain automatically.
+After rerunning, verify the collector started and inspect its status and diagnostics. `Completed` means collection finished within its declared scope. Domain samples intentionally remain `Partial` with a `SampledCoverage` diagnostic; separate access or query failures require attention. If the check is still `Skipped`, resolve the next prerequisite. `Error` means it ran but failed. The scanner does not enable scopes, install tools, or join a domain automatically.
 
 ```powershell
 $report = .\Invoke-StealthPrivesc.ps1 -Category DomainCloud -PassThru
@@ -454,19 +454,20 @@ pwsh .\tools\Update-ReferenceData.ps1 -Drivers -Lolbas
 pwsh .\tools\Update-ReferenceData.ps1 -WindowsUpdates -Month <comma-separated-month-list>
 ```
 
-The Windows updater replaces the snapshot with the requested months. Include historical months to retain Watson/Recall records. `-DriverDatabasePath` and `-VulnerabilityDatabasePath` accept compatible local snapshots. Patch assessment matches exact product branch, architecture, role, and revision; it is not Microsoft's full applicability engine.
+The Windows updater merges refreshed months into the existing snapshot, preserving other historical records and their retrieval dates. Use `-ReplaceWindowsSnapshot` only to intentionally replace it with the requested months. Snapshot evidence includes exact source months, gaps between them, and retained-month retrieval dates when available. Gaps and stale retained months produce `Partial` results; a recent refresh does not establish complete historical coverage. `-DriverDatabasePath` and `-VulnerabilityDatabasePath` accept compatible local snapshots. Patch assessment uses OS product branch, architecture, role, and revision independently of scanner process bitness; it is not Microsoft's full applicability engine.
 
 ## Validate
 
-On 64-bit Windows, with both 64-bit PowerShell 7 and Windows PowerShell 5.1 installed, run the complete local test matrix from the repository root. The runner finds `pwsh.exe` on `PATH` or in its standard Program Files location:
+The default validation matrix covers PowerShell 5.1 and 7 under both x64 and x86 processes. Windows PowerShell is discovered in native and WOW64 directories. PowerShell 7 is discovered in standard installation paths or supplied explicitly. To obtain a checksum-pinned portable x86 runtime and run the full matrix:
 
 ```powershell
-.\tools\Test-Project.ps1
+$x86 = .\tools\Get-TestPowerShell.ps1 -Architecture x86
+.\tools\Test-Project.ps1 -PowerShell7X86Path $x86 -ResultsDirectory .\TestResults\local
 ```
 
-The runner checks the runtime versions and architectures, then runs all six test scripts under each edition. It exits with code `0` only when all twelve invocations pass. Its summary explicitly counts suites that did not run; missing or unusable runtimes produce `NOT RUN` rows with a reason and repair action, plus a nonzero exit code. Running the tests on a non-Windows platform reports `NOT RUN` and exits nonzero instead of silently omitting Windows test groups. Add `-ResultsDirectory .\TestResults\local` to save `validation.json` with each suite's result, duration, execution command, and runtime version.
+The runner checks actual runtime versions and architectures, runs seven suites under each edition/architecture, and runs the PowerShell-7-only reference-updater suite under both PowerShell 7 architectures: 30 invocations total. It exits `0` only when all requested invocations pass. Missing or unusable runtimes produce `NOT RUN` rows and a nonzero exit code. Use `-Architecture x64` or `-Architecture x86` for a focused 15-invocation matrix; this does not credit the other architecture. `-ExpectedPlatform Windows11` or `-ExpectedPlatform Server2019` checks OS identity. `validation.json` records OS build, product type, architectures, runtime versions, duration and reproduction commands. Each suite has a configurable `-SuiteTimeoutSeconds` deadline (default 300).
 
-Run validation as a user with a loaded Windows profile: DPAPI fixtures can fail under sandbox or service tokens without a loaded profile. A failed suite may stop before its later assertions; fix the first failure and rerun the matrix. Test fixtures use a uniquely named temporary directory inside the repository and the runner removes it when finished. Scanner checks intentionally marked `Skipped` inside gating tests are expected outcomes being asserted, not omitted automated tests.
+Run validation as a user with a loaded Windows profile: DPAPI fixtures can fail under sandbox or service tokens. The extended suite continues independent assertions after an unavailable DPAPI fixture but still exits nonzero; this is incomplete validation. Other failures may stop later assertions. Fixtures use a uniquely named temporary directory inside the repository and are removed afterward. Scanner checks intentionally marked `Skipped` inside gating tests are tested outcomes, not omitted automated tests. See [platform validation and runner setup](docs/PLATFORMS.md).
 
 To run one test script manually under a single edition (substitute `Test-Sources.ps1`, `Test-ExtendedChecks.ps1`, `Test-Diagnostics.ps1`, `Test-Verification.ps1`, or `Test-AttackPaths.ps1` as needed):
 
@@ -479,11 +480,11 @@ Tests cover synthetic DPAPI/AES-GCM secrets, deny/object-specific ACLs, exact pa
 
 ## Continuous integration
 
-[GitHub Actions CI](.github/workflows/ci.yml) runs on pushes to `main`, pull requests targeting `main`, merge queues, manual dispatch, and a weekly schedule. Two Windows jobs use Server 2022 and Server 2025; each invokes the same local runner under 64-bit Windows PowerShell 5.1 and PowerShell 7. This produces 24 required suite invocations. `Test-Sources.ps1` parses the PowerShell sources, validates the module manifest and exports, compiles every native C# collector, parses bundled JSON, and checks generated coverage documentation. The existing suites exercise scanner behavior, diagnostics, verification commands, and attack-path/prerequisite reporting. Tests use synthetic fixtures and bounded local smoke checks on disposable runners.
+[GitHub Actions CI](.github/workflows/ci.yml) runs on pushes to `main`, pull requests targeting `main`, merge queues, manual dispatch, and a weekly schedule. Server 2022 and Server 2025 jobs each validate PowerShell 5.1 and 7 under x86 and x64 processes, producing 60 required invocations. CI downloads the pinned, checksum-verified portable x86 runtime. Suites cover source/native compilation, scanner behavior, diagnostics, verification, correlation, platform smoke checks and offline reference updates.
 
 A separate job validates workflow syntax and expressions using a pinned, checksum-verified actionlint release. Action dependencies use immutable commit pins, with Dependabot proposing weekly updates. Jobs have timeouts, run with read-only repository permissions, and cancel superseded runs. Windows jobs continue independently after failures and publish a summary plus 14-day artifacts containing the console log and `validation.json`. Artifacts include the commands and runtime versions needed to reproduce failures; missing tests fail the build.
 
-After the first hosted run, configure the repository's branch rules to require the stable **CI** status before merging. Adding a workflow alone does not enable branch protection. Hosted CI covers the two server images; Windows 11, Server 2019, other editions, and domain-specific behavior still require representative lab validation. Update the actionlint version and checksum together when upgrading it.
+The separate [Windows platform validation workflow](.github/workflows/platform-validation.yml) provides manually dispatched Win11 and Server 2019 jobs on dedicated self-hosted machines. It verifies OS identity and records actual architecture results. Provision runners before dispatching; adding a workflow does not constitute an OS test pass. See [runner labels and setup](docs/PLATFORMS.md). After a successful hosted run, configure branch rules to require **CI**. Other editions and domain-specific behavior still need representative lab validation.
 
 ## License and notices
 

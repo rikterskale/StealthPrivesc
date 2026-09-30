@@ -31,10 +31,11 @@ function Invoke-IdentityCheck {
             } finally{$i.Dispose()}
         }
         6 {
-            foreach($u in Get-Limited @(Get-LocalUser -ErrorAction Stop)){ Add-Evidence $u.Name 'Local account.' ($u | Select-Object Name,Enabled,@{n='SID';e={[string]$_.SID}},PasswordLastSet,LastLogon,PasswordExpires,UserMayChangePassword) }
-            foreach($g in Get-Limited @(Get-LocalGroup -ErrorAction Stop)){
-                try { $members=@(Get-LocalGroupMember -Group $g -ErrorAction Stop | Select-Object Name,@{n='SID';e={[string]$_.SID}},ObjectClass,PrincipalSource); Add-Evidence $g.Name 'Local group membership.' @{SID=$g.SID.Value;Members=$members} }
-                catch {Set-CheckPartial "Cannot resolve members of group: $($g.Name)" -ErrorRecord $_}
+            $inventory = Get-LocalAccountInventory
+            foreach($u in Get-Limited @($inventory.Users)){ Add-Evidence $u.Name 'Local account.' $u }
+            foreach($g in Get-Limited @($inventory.Groups)){
+                if ($g.Error) { Set-CheckPartial "Cannot resolve members of group: $($g.Name)" }
+                Add-Evidence $g.Name 'Local group membership.' @{SID=$g.SID;Members=@(Get-Limited @($g.Members))}
             }
         }
         7 { Add-Evidence 'Local account policy' 'net accounts output (localized).' @{Policy=(Invoke-ReadOnlyCommand "$env:SystemRoot\System32\net.exe" 'accounts')} }
