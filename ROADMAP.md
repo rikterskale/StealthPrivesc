@@ -13,7 +13,7 @@
   - `TaskImage` — overwrite writable task executable, restore original bytes
 - On success: interactive SYSTEM PowerShell over a named pipe, or one-shot `-Command` with captured output; result `Attacks` array added to the report and written as a standalone `attack-*.json`.
 - New native file `src/NativeExecute.cs` (SCM mutators: image-path change, status, control, DACL set — only new mutating API) and small self-contained runtime-compiled `src/Payload.cs` dropper (default `$env:TEMP`, random name, removed on exit unless `-Keep`).
-- `tests/Test-Executor.ps1` wired into `tools/Test-Project.ps1` and CI like the existing suites; README quick-start plus command-table row; DESIGN.md paragraph; version 0.3.0 and schema 1.6 (`Attacks`).
+- A dedicated suite is added and wired into CI like the existing ones; README quick-start plus command-table row; DESIGN.md paragraph; version 0.3.0 and schema 1.6 (`Attacks`).
 
 Documented limits for v0.3.0: a registry-image candidate without start/stop rights is flagged reboot-required instead of failing; the shell is pipe-based with no visible window (session 0); no concurrency guarantee between scan and exec — the re-check runs before any modification.
 

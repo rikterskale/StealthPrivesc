@@ -22,7 +22,7 @@ function Get-ReferenceDocument {
         Add-Evidence $file.FullName "$Kind reference snapshot." $evidence
         if(([DateTimeOffset]::UtcNow-$retrieved).TotalDays-gt30){Set-CheckPartial "$Kind reference data is older than 30 days."}
         return $document
-    }catch{Set-CheckPartial "$Kind reference data is missing or invalid. Run tools/Update-ReferenceData.ps1 or supply a validated reference path." -ErrorRecord $_;return $null}
+    }catch{Set-CheckPartial "$Kind reference data is missing or invalid. Supply a validated reference path." -ErrorRecord $_;return $null}
 }
 function ConvertTo-ReferenceDate {
     param([object]$Value)

@@ -73,7 +73,7 @@ function New-AssessmentDiagnostic {
     } elseif ($types -match 'JsonReaderException|XmlException|FormatException|InvalidDataException' -or $errorCategory -eq 'ParserError') {
         $code = 'InvalidData'
         $explanation = 'The input could not be read in the format this collector expects.'
-        $steps = @('Check that the input is complete, readable, and supported by this collector.', 'For reference databases, run tools/Update-ReferenceData.ps1 or select a validated reference file. For application data, use a supported format; keep the original unchanged.')
+        $steps = @('Check that the input is complete, readable, and supported by this collector.', 'For reference databases, supply a validated, up-to-date reference file. For application data, use a supported format; keep the original unchanged.')
     } elseif ($null -ne $exitCode) {
         $code = 'CommandFailed'
         $explanation = "A helper process exited unsuccessfully (exit code $exitCode)."
@@ -97,7 +97,7 @@ function New-AssessmentDiagnostic {
     } elseif ($Reason -match 'reference data|reference.*(?:missing|invalid)|snapshot') {
         $code = 'ReferenceData'
         $explanation = 'The reference database may be missing, outdated, invalid, or lack rules for this system.'
-        $steps = @('Run tools/Update-ReferenceData.ps1 to refresh the reference data, or supply a validated -DriverDatabasePath / -VulnerabilityDatabasePath.', 'Check the database coverage and retrieval date. A missing product rule cannot establish whether the system is patched.')
+        $steps = @('Provide a current, validated -DriverDatabasePath / -VulnerabilityDatabasePath to refresh the reference data.', 'Check the database coverage and retrieval date. A missing product rule cannot establish whether the system is patched.')
     } elseif ($Reason -match 'access|permission|inaccessible|Cannot (?:read|enumerate|assess|inspect)|could not be (?:read|queried)') {
         $code = 'ResourceUnavailable'
         $explanation = 'The resource could not be inspected. It may be restricted, busy, absent, or unsupported; this message alone does not establish the cause.'
