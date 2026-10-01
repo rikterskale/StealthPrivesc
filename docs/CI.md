@@ -86,12 +86,13 @@ tests and avoiding silent data updates.
 
 ## Merge enforcement
 
-The [main ruleset configuration](../.github/ci/main-ruleset.json) requires a PR, one independent approving review,
+The [main ruleset configuration](../.github/ci/main-ruleset.json) requires a PR,
 resolved review conversations, and the **CI** status check from GitHub Actions,
-with the branch up to date. Deletion and force-push are blocked. No admin bypass
-is included. CodeQL errors and high/critical security alerts also block merging.
-A sole maintainer needs another reviewer to satisfy independent
-approval. Protect CI changes through review just as runtime changes are reviewed.
+with the branch up to date. Reviewer approval is optional: no approving reviews,
+designated reviewers, code-owner approval, last-push approval, or extra approval
+for unattributed changes are required. Deletion and force-push are blocked. No
+admin bypass is included. CodeQL errors and high/critical security alerts also
+block merging.
 
 Workflow changes do not reach GitHub until committed and pushed. Hosted validation
 and actual runner evidence must be inspected before calling this implementation
