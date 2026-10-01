@@ -1,16 +1,7 @@
 function Invoke-HandleCheck {
-    # A process boundary also bounds path-resolution callbacks on unusual file systems.
-    $source64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Join-Path $script:ModuleRoot 'NativeHandles.cs')))
-    $code=@'
-$ErrorActionPreference='Stop'
-$source=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__SOURCE__'))
-Add-Type -Path $source
-[StealthPrivesc.NativeHandles]::Inspect(__MAX__,200000)|ConvertTo-Json -Depth 6 -Compress
-'@
-    $code=$code.Replace('__SOURCE__',$source64).Replace('__MAX__',[string]$script:Context.MaxItems)
-    $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code))
-    $hostPath=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-    $result=Invoke-ReadOnlyCommand $hostPath "-NoLogo -NoProfile -NonInteractive -EncodedCommand $encoded"|ConvertFrom-Json
+    # In-process collector: the native call keeps its bounded scan budget and never needs a child process.
+    if(-not('StealthPrivesc.NativeHandles'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'NativeHandles.cs') -ErrorAction Stop}
+    $result=[StealthPrivesc.NativeHandles]::Inspect($script:Context.MaxItems,200000)
     $identity=[Security.Principal.WindowsIdentity]::GetCurrent();try{$userSid=$identity.User.Value}finally{$identity.Dispose()}
     foreach($item in $result.Items){
         $evidence=@{SourceProcessId=$item.SourceProcessId;Handle=$item.HandleValue;GrantedAccess=('0x{0:X8}'-f[uint32]$item.GrantedAccess);ObjectType=$item.ObjectType;TargetProcessId=$item.TargetProcessId;TargetOwnerSid=$item.TargetOwnerSid}

@@ -22,8 +22,7 @@ $groups=@(Get-LocalGroup -ErrorAction Stop | Select-Object -First ($maximum+1) |
 })
 @{Users=$users;Groups=$groups}|ConvertTo-Json -Depth 6 -Compress
 '@
-            $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code.Replace('__MAX__',[string]$script:Context.MaxItems)))
-            Invoke-ReadOnlyCommand (Get-WindowsPowerShellPath) "-NoLogo -NoProfile -NonInteractive -EncodedCommand $encoded" | ConvertFrom-Json -ErrorAction Stop
+            (Invoke-ReadOnlyCommand -Payload ($code.Replace('__MAX__',[string]$script:Context.MaxItems))) | ConvertFrom-Json -ErrorAction Stop
         } else {
             $users=@(Get-LocalUser -ErrorAction Stop | Select-Object -First ($script:Context.MaxItems+1) | Select-Object Name,Enabled,@{n='SID';e={[string]$_.SID}},PasswordLastSet,LastLogon,PasswordExpires,UserMayChangePassword)
             $groups=@(foreach($group in @(Get-LocalGroup -ErrorAction Stop | Select-Object -First ($script:Context.MaxItems+1))) {

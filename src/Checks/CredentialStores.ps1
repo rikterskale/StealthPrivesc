@@ -35,9 +35,7 @@ foreach($entry in $entries){
 @{Items=$results;Truncated=($entries.Count-gt__MAX__)}|ConvertTo-Json -Depth 5 -Compress
 '@
             $code=$code.Replace('__MAX__',[string]$script:Context.MaxItems)
-            $encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code))
-            $hostPath=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-            $result=Invoke-ReadOnlyCommand $hostPath "-NoLogo -NoProfile -NonInteractive -EncodedCommand $encoded"|ConvertFrom-Json
+            $result=(Invoke-ReadOnlyCommand -Payload $code)|ConvertFrom-Json
             foreach($item in $result.Items){Add-Evidence "PasswordVault/$($item.Index)" 'WinRT Credential Locker accessibility; values redacted inside the isolated collector.' $item $(if($item.SecretReturned){'Medium'}else{'Information'});if($item.Error){Set-CheckPartial 'Some Credential Locker entries could not be retrieved.'}}
             if($result.Truncated){Set-CheckPartial 'Credential Locker enumeration exceeded MaxItems.'}
         }

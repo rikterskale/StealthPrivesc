@@ -8,12 +8,12 @@ function Get-StealthPrivescCheck {
     param([int[]]$CheckId, [string[]]$Category)
     $catalog = @(Get-Content (Join-Path $script:ModuleRoot '../data/checks.json') -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop | ForEach-Object { $_ })
     $allCategories = @($catalog | Select-Object -ExpandProperty Category -Unique)
-    if ($CheckId) {
+    if ($null -ne $CheckId -and $CheckId.Count -gt 0) {
         $unknown = @($CheckId | Where-Object { $_ -notin $catalog.Id })
         if ($unknown.Count) { throw "Unknown check ID(s): $($unknown -join ', ')" }
         $catalog = @($catalog | Where-Object { $_.Id -in $CheckId })
     }
-    if ($Category) {
+    if ($null -ne $Category -and $Category.Count -gt 0) {
         $unknown = @($Category | Where-Object { $_ -notin $allCategories })
         if ($unknown.Count) { throw "Unknown category: $($unknown -join ', '). Valid: $($allCategories -join ', ')" }
         $catalog = @($catalog | Where-Object { $_.Category -in $Category })
@@ -59,12 +59,13 @@ function Invoke-StealthPrivesc {
         }
         $phase = 'Initialization'
         if ($env:OS -ne 'Windows_NT') { throw [PlatformNotSupportedException]::new('Scanning requires Windows. -ListChecks can be used on other platforms.') }
-        foreach ($nativeType in @('Native','NativeInspection','NativeObjects')) {
+        foreach ($nativeType in @('Native','NativeInspection','NativeObjects','NativeConsole')) {
             if (-not ("StealthPrivesc.$nativeType" -as [type])) {
                 Write-Verbose "Loading native support: $nativeType"
                 Add-Type -Path (Join-Path $script:ModuleRoot "$nativeType.cs") -ErrorAction Stop
             }
         }
+        try { if (-not $script:StealthAmsiApplied) { [void][StealthPrivesc.Console]::Amsi(); $script:StealthAmsiApplied = $true } } catch { Write-Verbose "AMSI bypass unavailable here: $($_.Exception.Message)" }
         $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
         $principal = New-Object Security.Principal.WindowsPrincipal($identity)
         $script:Context = @{

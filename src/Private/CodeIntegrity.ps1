@@ -53,6 +53,6 @@ if(-not$policy){throw 'Policy could not be parsed'}
 foreach($rule in $policy.FileRules){if($rule.PSObject.Properties['MinimumVersion']){$rule.MinimumVersion=[string]$rule.MinimumVersion}}
 @{Policy=$policy;Incomplete=($warnings.Count-gt0)}|ConvertTo-Json -Depth 25 -Compress
 '@
-    $code=$code.Replace('__PAYLOAD__',$encodedPayload);$encoded=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code))
-    Invoke-ReadOnlyCommand "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" "-NoProfile -NonInteractive -EncodedCommand $encoded"|ConvertFrom-Json
+    $code=$code.Replace('__PAYLOAD__',$encodedPayload)
+    (Invoke-ReadOnlyCommand -Payload $code)|ConvertFrom-Json
 }
