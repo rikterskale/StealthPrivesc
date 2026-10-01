@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rikterskale/StealthPrivesc/report-1.5.schema.json",
+  "type": "object",
+  "required": ["SchemaVersion", "ToolVersion", "RunStatus", "StartedUtc", "FinishedUtc", "Checks", "Summary", "Diagnostics", "SkippedChecks", "AttackPathAnalysis", "ProcessArchitecture", "OperatingSystemArchitecture", "PowerShellVersion", "Scope"],
+  "properties": {
+    "SchemaVersion": {"const": "1.5"},
+    "ToolVersion": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+    "RunStatus": {"enum": ["Running", "Completed", "Failed"]},
+    "StartedUtc": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$"},
+    "FinishedUtc": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$"},
+    "ProcessArchitecture": {"enum": ["x86", "x64"]},
+    "OperatingSystemArchitecture": {"enum": ["x86", "x64"]},
+    "PowerShellVersion": {"type": "string", "minLength": 3},
+    "Scope": {
+      "type": "object",
+      "required": ["Network", "Domain", "Sensitive", "MaxItems", "MaxFileBytes", "CommandTimeoutSeconds"],
+      "properties": {
+        "Network": {"type": "boolean"}, "Domain": {"type": "boolean"}, "Sensitive": {"type": "boolean"},
+        "MaxItems": {"type": "integer", "minimum": 10, "maximum": 100000},
+        "MaxFileBytes": {"type": "integer", "minimum": 1024, "maximum": 10485760},
+        "CommandTimeoutSeconds": {"type": "integer", "minimum": 1, "maximum": 300}
+      }
+    },
+    "Summary": {
+      "type": "object",
+      "required": ["Completed", "Partial", "Skipped", "Unsupported", "Error"],
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "Diagnostics": {"type": "array", "items": {"$ref": "#/$defs/diagnostic"}},
+    "SkippedChecks": {"type": "array", "items": {"type": "object", "required": ["CheckId", "ReasonCode", "Explanation", "SuggestedActions"]}},
+    "Checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["Id", "Title", "Category", "Coverage", "Status", "Findings", "Limitations", "Diagnostics", "DurationMs", "Verification"],
+        "properties": {
+          "Id": {"type": "integer", "minimum": 1, "maximum": 148},
+          "Title": {"type": "string", "minLength": 1}, "Category": {"type": "string", "minLength": 1},
+          "Coverage": {"enum": ["Implemented", "Partial", "Unsupported"]},
+          "Status": {"enum": ["Completed", "Partial", "Skipped", "Unsupported", "Error"]},
+          "DurationMs": {"type": "integer", "minimum": 0},
+          "Limitations": {"type": "array", "items": {"type": "string"}},
+          "Diagnostics": {"type": "array", "items": {"$ref": "#/$defs/diagnostic"}},
+          "Verification": {
+            "type": "object", "required": ["CollectorStarted", "RerunCommand", "Commands", "SourceReferences", "OmittedCommandCount"],
+            "properties": {"CollectorStarted": {"type": "boolean"}, "Commands": {"type": "array", "maxItems": 1000}, "SourceReferences": {"type": "array"}, "OmittedCommandCount": {"type": "integer", "minimum": 0}, "RerunCommand": {"type": "string", "minLength": 1}}
+          },
+          "Findings": {
+            "type": "array", "items": {
+              "type": "object", "required": ["Severity", "Target", "Observation", "Evidence", "Remediation"],
+              "properties": {"Severity": {"enum": ["Information", "Low", "Medium", "High"]}, "Target": {"type": "string"}, "Observation": {"type": "string"}, "Remediation": {"type": "string"}}
+            }
+          }
+        }
+      }
+    },
+    "AttackPathAnalysis": {
+      "type": "object", "required": ["EngineVersion", "Status", "Paths", "RuleCoverage", "Limitations"],
+      "properties": {"Status": {"enum": ["Completed", "Partial", "Error"]}, "Paths": {"type": "array"}, "RuleCoverage": {"type": "array"}, "Limitations": {"type": "array"}}
+    }
+  },
+  "$defs": {
+    "diagnostic": {
+      "type": "object", "required": ["Code", "Summary", "Explanation", "SuggestedActions", "TechnicalDetails"],
+      "properties": {"Code": {"type": "string", "minLength": 1}, "SuggestedActions": {"type": "array", "minItems": 1}, "TechnicalDetails": {"type": "object"}}
+    }
+  }
+}

@@ -2,3 +2,6 @@ reports/
 TestResults/
 .validation-temp-*/
 *.user
+__pycache__/
+.github/ci/bin/
+.github/ci/obj/
