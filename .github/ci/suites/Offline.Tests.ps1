@@ -106,6 +106,22 @@ Describe 'Offline diagnostics, limits and redaction' {
         }
     }
 
+    It 'Reads the built-in Administrator state from the shared account inventory using its RID' {
+        Mock Get-LocalAccountInventory -ModuleName StealthPrivesc {
+            [pscustomobject]@{Users=@(
+                [pscustomobject]@{Name='Renamed administrator';SID='S-1-5-21-1-2-3-500';Enabled=$false},
+                [pscustomobject]@{Name='Other user';SID='S-1-5-21-1-2-3-1001';Enabled=$true}
+            );Groups=@()}
+        }
+        & $script:ScannerModule {
+            Invoke-PolicyCheck 111
+            $script:Current.Findings.Count | Should -Be 1
+            $script:Current.Findings[0].Target | Should -Be 'Renamed administrator'
+            $script:Current.Findings[0].Evidence.Enabled | Should -BeFalse
+            $script:Current.Findings[0].Evidence.SID | Should -Be 'S-1-5-21-1-2-3-500'
+        }
+    }
+
     It 'Finds synthetic secret indicators without copying matched values' {
         $path=Join-Path $TestDrive 'settings.env'
         [IO.File]::WriteAllText($path,'password=CANARY_FILE_SECRET; api_key=CANARY_FILE_SECRET')

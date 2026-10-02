@@ -73,10 +73,18 @@ Describe 'Source, manifest and dispatch contracts' {
             param($HostPath)
             $script:Context = @{CommandTimeoutSeconds=15}
             $script:Current = @{}
+            $payload = @'
+$items = @(
+    'CI_HELPER_OUTPUT'
+)
+$items | ForEach-Object { Write-Output $_ }
+'@
             1..2 | ForEach-Object {
                 (Invoke-ReadOnlyCommand -FileName (Join-Path $env:SystemRoot 'System32/cmd.exe') -Arguments '/d /c echo CI_HELPER_OUTPUT').Trim() | Should -BeExactly 'CI_HELPER_OUTPUT'
-                (Invoke-ReadOnlyCommand -HostPath $HostPath -Payload "[System.Console]::WriteLine('CI_HELPER_OUTPUT')`n").Trim() | Should -BeExactly 'CI_HELPER_OUTPUT'
+                (Invoke-ReadOnlyCommand -HostPath $HostPath -Payload $payload).Trim() | Should -BeExactly 'CI_HELPER_OUTPUT'
             }
+            $unicode = [string][char]0x03bb
+            (Invoke-ReadOnlyCommand -HostPath $HostPath -Payload ("'" + $unicode + "'")).Trim() | Should -BeExactly $unicode
         } $hostPath
     }
 }

@@ -49,7 +49,7 @@ function Invoke-PolicyCheck {
         }
         57 { foreach($bios in Get-CimInstance Win32_BIOS -ErrorAction Stop){Add-Evidence $bios.Manufacturer 'BIOS release date is an age indicator, not a vulnerability verdict.' @{Version=$bios.SMBIOSBIOSVersion;ReleaseDate=$bios.ReleaseDate;AgeDays=$(if($bios.ReleaseDate){[int]((Get-Date)-$bios.ReleaseDate).TotalDays})}} }
         66 { Add-RegistryEvidence "$system\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" @('Enabled');Add-RegistryEvidence "$system\Control\CI\Config" @('VulnerableDriverBlocklistEnable');Set-CheckPartial 'Only related Code Integrity state is collected; no validated KernelQuick/ValleyRAT indicator signatures are included.' }
-        111 { foreach($u in Get-LocalUser -ErrorAction Stop|Where-Object{$_.SID.Value-match'-500$'}){Add-Evidence $u.Name 'Built-in Administrator account state.' @{Enabled=$u.Enabled;SID=$u.SID.Value} $(if($u.Enabled){'Low'}else{'Information'})} }
+        111 { foreach($u in (Get-Limited @((Get-LocalAccountInventory).Users) | Where-Object SID -match '-500$')){Add-Evidence $u.Name 'Built-in Administrator account state.' @{Enabled=$u.Enabled;SID=$u.SID} $(if($u.Enabled){'Low'}else{'Information'})} }
         112 {
             [xml]$xml=Get-AppLockerPolicy -Effective -Xml -ErrorAction Stop
             $collections=@($xml.SelectNodes('/AppLockerPolicy/RuleCollection'))
