@@ -122,6 +122,70 @@ Describe 'Offline diagnostics, limits and redaction' {
         }
     }
 
+    It 'Retains network evidence when the configuration wrapper fails a typed assignment' {
+        Mock Get-NetIPConfiguration -ModuleName StealthPrivesc { throw [Management.Automation.SetValueInvocationException]::new('CANARY_NETWORK_EXCEPTION_SECRET') }
+        Mock Get-NetIPInterface -ModuleName StealthPrivesc {
+            [pscustomobject]@{InterfaceIndex=7;InterfaceAlias='Fixture adapter';AddressFamily='IPv4'}
+            [pscustomobject]@{InterfaceIndex=7;InterfaceAlias='Fixture adapter';AddressFamily='IPv6'}
+            [pscustomobject]@{InterfaceIndex=8;InterfaceAlias='Empty adapter';AddressFamily='IPv4'}
+        }
+        Mock Get-NetIPAddress -ModuleName StealthPrivesc {
+            [pscustomobject]@{InterfaceIndex=7;AddressFamily=2;IPAddress='192.0.2.7'}
+            [pscustomobject]@{InterfaceIndex=7;AddressFamily='IPv6';IPAddress='2001:db8::7'}
+        }
+        Mock Get-NetRoute -ModuleName StealthPrivesc { [pscustomobject]@{InterfaceIndex=7;DestinationPrefix='192.0.2.0/24';NextHop='0.0.0.0';RouteMetric=1} }
+        Mock Get-NetNeighbor -ModuleName StealthPrivesc { @() }
+        Mock Get-NetConnectionProfile -ModuleName StealthPrivesc {
+            [pscustomobject]@{Name='Fixture profile one';InterfaceAlias='Fixture adapter'}
+            [pscustomobject]@{Name='Fixture profile two';InterfaceAlias='Fixture adapter'}
+        }
+        Mock Get-DnsClientCache -ModuleName StealthPrivesc { @() }
+        Mock Get-Content -ModuleName StealthPrivesc { @() } -ParameterFilter { $LiteralPath -like '*drivers\etc\hosts' }
+        & $script:ScannerModule {
+            $script:Current.Id=130
+            Invoke-InventoryCheck 130
+            $script:Current.Status | Should -Be 'Partial'
+            $interface=@($script:Current.Findings | Where-Object Target -eq 'Fixture adapter')
+            $interface.Count | Should -Be 1
+            $interface[0].Evidence.InterfaceIndex | Should -Be 7
+            $interface[0].Evidence.IPv4 | Should -Contain '192.0.2.7'
+            $interface[0].Evidence.IPv6 | Should -Contain '2001:db8::7'
+            $empty=@($script:Current.Findings | Where-Object Target -eq 'Empty adapter')
+            $empty.Count | Should -Be 1
+            $empty[0].Evidence.IPv4.Count | Should -Be 0
+            $empty[0].Evidence.IPv6.Count | Should -Be 0
+            @($script:Current.Findings | Where-Object Observation -eq 'Route.').Count | Should -Be 1
+            @($script:Current.Findings | Where-Object Observation -eq 'Network profile.').Count | Should -Be 2
+            $script:Current.Diagnostics.Count | Should -Be 1
+            ($script:Current.Diagnostics | ConvertTo-Json -Depth 8) | Should -Not -Match 'CANARY_NETWORK_EXCEPTION_SECRET'
+        }
+        Should -Invoke Get-NetIPInterface -ModuleName StealthPrivesc -Times 1 -Exactly
+        Should -Invoke Get-NetIPAddress -ModuleName StealthPrivesc -Times 1 -Exactly -ParameterFilter { $PolicyStore -eq 'ActiveStore' }
+    }
+
+    It 'Uses successful network configuration without additional address queries' {
+        Mock Get-NetIPConfiguration -ModuleName StealthPrivesc { [pscustomobject]@{InterfaceIndex=7;InterfaceAlias='Fixture adapter';IPv4Address=@([pscustomobject]@{IPAddress='192.0.2.7'});IPv6Address=@()} }
+        Mock Get-NetIPInterface -ModuleName StealthPrivesc { throw 'Unexpected fallback' }
+        Mock Get-NetIPAddress -ModuleName StealthPrivesc { throw 'Unexpected fallback' }
+        & $script:ScannerModule {
+            $inventory=@(Get-NetworkInterfaceInventory)
+            $inventory.Count | Should -Be 1
+            $inventory[0].InterfaceAlias | Should -Be 'Fixture adapter'
+            $script:Current.Status | Should -Be 'Completed'
+        }
+        Should -Invoke Get-NetIPInterface -ModuleName StealthPrivesc -Times 0 -Exactly
+        Should -Invoke Get-NetIPAddress -ModuleName StealthPrivesc -Times 0 -Exactly
+    }
+
+    It 'Propagates failures in direct address inventory instead of reporting successful collection' {
+        Mock Get-NetIPConfiguration -ModuleName StealthPrivesc { throw [Management.Automation.SetValueInvocationException]::new('Wrapper failure') }
+        Mock Get-NetIPInterface -ModuleName StealthPrivesc { [pscustomobject]@{InterfaceIndex=7;InterfaceAlias='Fixture adapter'} }
+        Mock Get-NetIPAddress -ModuleName StealthPrivesc { throw [UnauthorizedAccessException]::new('Direct inventory failure') }
+        & $script:ScannerModule {
+            { Get-NetworkInterfaceInventory } | Should -Throw '*Direct inventory failure*'
+        }
+    }
+
     It 'Finds synthetic secret indicators without copying matched values' {
         $path=Join-Path $TestDrive 'settings.env'
         [IO.File]::WriteAllText($path,'password=CANARY_FILE_SECRET; api_key=CANARY_FILE_SECRET')
