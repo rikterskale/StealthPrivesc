@@ -26,6 +26,21 @@ Services, SystemRisk, and TasksStartup. Multiple values are combined.
 List matching checks without running them. Can be combined with -Category and
 -CheckId to inspect a proposed selection.
 
+.PARAMETER Plan
+Return a static collector/dependency/resource preview without running collectors,
+loading native components or creating output files.
+
+.PARAMETER CollectorTimeoutSeconds
+Cooperative per-check deadline in seconds. Native pipe/device/handle helpers have
+enforced deadlines. Other blocking APIs are not universally interruptible.
+
+.PARAMETER MaxCollectorOutputCharacters
+Limit serialized finding characters per check and each helper output stream.
+
+.PARAMETER NativeAssemblyDirectory
+Load trusted Authenticode-signed components for the current runtime/architecture
+instead of compiling source. An invalid component fails its check without fallback.
+
 .PARAMETER IncludeNetwork
 Enable checks that make network connections, including external metadata or
 advisory queries.
@@ -81,12 +96,16 @@ param(
     [int[]]$CheckId,
     [string[]]$Category,
     [switch]$ListChecks,
+    [switch]$Plan,
     [switch]$IncludeNetwork,
     [switch]$IncludeDomain,
     [switch]$IncludeSensitive,
     [ValidateRange(10,100000)][int]$MaxItems = 500,
     [ValidateRange(1024,10485760)][int]$MaxFileBytes = 1048576,
     [ValidateRange(1,300)][int]$CommandTimeoutSeconds = 15,
+    [ValidateRange(1,3600)][int]$CollectorTimeoutSeconds = 60,
+    [ValidateRange(1024,8388608)][int]$MaxCollectorOutputCharacters = 8388608,
+    [string]$NativeAssemblyDirectory,
     [string[]]$SearchRoot,
     [string]$DriverDatabasePath,
     [string]$VulnerabilityDatabasePath,

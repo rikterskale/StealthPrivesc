@@ -4,7 +4,7 @@ function Get-ReferenceDocument {
     try{
         $file=Get-Item -LiteralPath $Path -ErrorAction Stop
         if($file.Length-gt100MB){throw 'Reference document exceeds size limit.'}
-        $document=Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8 -ErrorAction Stop|ConvertFrom-Json -ErrorAction Stop
+        $document=Read-AssessmentText $file.FullName -MaximumBytes 104857600|ConvertFrom-Json -ErrorAction Stop
         if($document.SchemaVersion-ne1-or-not$document.PSObject.Properties['Entries']){throw 'Unsupported reference schema.'}
         $retrieved=ConvertTo-ReferenceDate $document.RetrievedUtc
         $evidence = @{Source=$document.Source;RetrievedUtc=$document.RetrievedUtc;Entries=@($document.Entries).Count;SHA256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash}

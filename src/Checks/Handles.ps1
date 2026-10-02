@@ -1,7 +1,6 @@
 function Invoke-HandleCheck {
-    # In-process collector: the native call keeps its bounded scan budget and never needs a child process.
-    if(-not('StealthPrivesc.NativeHandles'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'NativeHandles.cs') -ErrorAction Stop}
-    $result=[StealthPrivesc.NativeHandles]::Inspect($script:Context.MaxItems,200000)
+    # The helper deadline can terminate a blocked native metadata query.
+    $result=Invoke-IsolatedNativeQuery Handles
     $identity=[Security.Principal.WindowsIdentity]::GetCurrent();try{$userSid=$identity.User.Value}finally{$identity.Dispose()}
     foreach($item in $result.Items){
         $evidence=@{SourceProcessId=$item.SourceProcessId;Handle=$item.HandleValue;GrantedAccess=('0x{0:X8}'-f[uint32]$item.GrantedAccess);ObjectType=$item.ObjectType;TargetProcessId=$item.TargetProcessId;TargetOwnerSid=$item.TargetOwnerSid}

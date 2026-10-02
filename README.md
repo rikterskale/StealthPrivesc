@@ -48,6 +48,58 @@ For example, save a service and startup review:
 .\Invoke-StealthPrivesc.ps1 -ListChecks -Category Services,TasksStartup
 ```
 
+Use `-Plan` to preview collector dependencies, conditional helper processes,
+potential network destinations and resource expressions without executing
+collectors, loading native support, or creating reports:
+
+```powershell
+.\Invoke-StealthPrivesc.ps1 -Plan -Category Services,TasksStartup
+```
+
+The preview reads repository metadata. Paths and launches depending on host
+configuration remain conditional; it is not a complete execution trace.
+
+Collection uses lazy native loading and shared, per-run snapshots for processes,
+owners, modules, ACL assessments and ordinary registry policies. Credential
+values are excluded from the shared registry cache. Cached facts can become stale
+during a run; prerequisite validation and separate reruns require fresh evidence.
+
+`-CollectorTimeoutSeconds` defaults to 60. It sets a cooperative per-check deadline
+at shared collection checkpoints. Pipe/device/handle queries run in disposable
+helpers with enforced deadlines; other blocking CIM/COM/LDAP calls are not
+universally interruptible. `-CommandTimeoutSeconds` still caps individual helpers.
+`-MaxCollectorOutputCharacters` defaults to 8,388,608 and caps serialized findings
+per check plus each helper output stream. Exceeding a budget preserves collected
+findings and produces incomplete coverage. Existing `-MaxItems` and
+`-MaxFileBytes` limits still apply.
+
+Reports include `AssessmentPlan` and `Footprint`. The footprint counts instrumented
+queries, cache reuse, direct helper launches, wrapped file reads/writes and
+explicit DNS/HTTP requests without recording content. Native-internal and
+helper-internal I/O are outside these counters. Saved snapshots precede their
+own export; obtain counters including completed report writes in the same module
+session with:
+
+```powershell
+Import-Module .\src\StealthPrivesc.psd1
+$report = Invoke-StealthPrivesc -CheckId 47 -PassThru -OutputDirectory .\reports
+$report.Footprint
+Measure-AssessmentFootprint
+```
+
+Optional `-NativeAssemblyDirectory` loads Authenticode-verified precompiled
+components from `<directory>/<Desktop|Core>/<x86|x64>/<component>.dll`. Use trusted
+assemblies built for the exact runtime and process architecture. Missing,
+untrusted or incompatible components fail the affected check without falling
+back to compilation. Already loaded types are reused; use a fresh PowerShell
+process after updating native code or switching assembly sources. The development
+helper `.github/ci/Build-NativeSupport.ps1 -Destination <directory>` builds the
+current runtime/architecture in a fresh process. Supply `-SigningCertificate`
+from your approved signing process, or sign the unsigned artifacts separately.
+
+These features reduce collection overhead and make it measurable. Windows
+auditing, AMSI, ETW and other security controls remain active.
+
 ## Read the results
 
 The console shows one row per selected check and a status summary. The output directory contains timestamped `assessment-*.json` and `assessment-*.html` files. HTML is for browsing; JSON preserves structured evidence. `-PassThru` returns the report object:

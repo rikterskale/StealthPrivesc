@@ -35,7 +35,7 @@ The [platform workflow](../.github/workflows/platform-validation.yml) is manual-
 
 Dispatch **Dedicated platform validation**, choosing a platform and account context. `Both` requires both context runners and defines 12 cells on that platform. The runner checks workstation build >= 22000 for Windows 11, or server product type/build 17763 for Server 2019. Domain lab requires domain membership and the ActiveDirectory module. Jobs retain evidence for 30 days. They never change domain membership, provision products or request elevation. No test VM is provisioned by this repository.
 
-Integration first checks the read-only API contract and fails before scanner execution if it finds mutation APIs. The current process-memory patching code blocks this stage. Collector access failures and intentional bounds remain explicit; a successful offline suite is not live-environment validation. Browser/credential-store APIs, every Windows edition/build, cloud identity behavior and all AD/AD CS topologies need additional representative fixtures and lab evidence.
+Integration first checks the read-only API contract and fails before scanner execution if it finds mutation APIs. Collector access failures and intentional bounds remain explicit; a successful offline suite is not live-environment validation. Browser/credential-store APIs, every Windows edition/build, cloud identity behavior and all AD/AD CS topologies need additional representative fixtures and lab evidence.
 
 ## Collection views
 

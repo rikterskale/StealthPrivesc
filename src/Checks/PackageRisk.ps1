@@ -22,7 +22,7 @@ function Invoke-PackageRiskCheck {
         $term=$app.Name+' '+$app.Version
         try{
             $url='https://services.nvd.nist.gov/rest/json/cves/2.0?resultsPerPage=20&keywordSearch='+[Uri]::EscapeDataString($term)
-            $response=Invoke-RestMethod -Uri $url -TimeoutSec $script:Context.CommandTimeoutSeconds -ErrorAction Stop
+            Add-AssessmentCounter NetworkRequests;$response=Invoke-RestMethod -Uri $url -TimeoutSec $script:Context.CommandTimeoutSeconds -ErrorAction Stop
             foreach($entry in @($response.vulnerabilities)){$cve=$entry.cve;Add-Evidence $app.Name 'NVD package/version keyword advisory candidate; CPE applicability requires validation and this is not a confirmed vulnerability.' @{Version=$app.Version;Cve=$cve.id;Published=$cve.published;LastModified=$cve.lastModified;Source=('https://nvd.nist.gov/vuln/detail/'+$cve.id)} 'Low'}
             Add-Evidence $app.Name 'Public advisory lookup completed; no keyword match does not establish absence of vulnerabilities.' @{Returned=@($response.vulnerabilities).Count;Total=$response.totalResults}
             if($response.totalResults-gt20){Set-CheckPartial 'NVD candidate results exceeded the per-package result cap.'}

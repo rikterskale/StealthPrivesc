@@ -76,14 +76,14 @@ function Invoke-ExecutionCheck {
         41 { $identity=[Security.Principal.WindowsIdentity]::GetCurrent();try{$currentSid=$identity.User.Value}finally{$identity.Dispose()};foreach($hive in Get-Limited @(Get-RegistryChildren 'Registry::HKEY_USERS')){if($hive.PSChildName-match'^S-1-5-21-'-and$hive.PSChildName-ne$currentSid){Add-WritablePath ($hive.PSPath+'\Software\Microsoft\Input\TypingInsights') 'Cross-user write access to the loaded profile TypingInsights key.' -Registry}} }
         42 {
             $self=[Security.Principal.WindowsIdentity]::GetCurrent();try{$selfSid=$self.User.Value}finally{$self.Dispose()}
-            foreach($p in Get-Limited @(Get-CimInstance Win32_Process -ErrorAction Stop)){
-                try{$owner=Invoke-CimMethod -InputObject $p -MethodName GetOwnerSid -ErrorAction Stop;if($owner.ReturnValue-ne0){Set-CheckPartial 'Some process owners could not be resolved.';continue};if($owner.Sid-eq$selfSid){continue}
+            foreach($p in Get-Limited @(Get-AssessmentProcesses)){
+                try{$owner=Get-AssessmentProcessOwner $p;if($owner.ReturnValue-ne0){Set-CheckPartial 'Some process owners could not be resolved.';continue};if($owner.Sid-eq$selfSid){continue}
                     foreach($right in @(@('CreateThread',2),@('VmWrite',0x20),@('DuplicateHandle',0x40),@('WriteDacl',0x40000))){$r=[StealthPrivesc.Native]::ProcessAccess($p.ProcessId,$right[1]);if($r.Allowed){Add-Evidence "$($p.Name) ($($p.ProcessId))" 'Cross-user process access capability; handle immediately closed.' @{OwnerSid=$owner.Sid;Right=$right[0]} $(if($script:Context.Elevated){'Information'}else{'Medium'})}}
                 }catch{Set-CheckPartial 'Some processes exited or could not be assessed.' -ErrorRecord $_}
             }
         }
         44 { foreach($pipe in Get-Limited @([IO.Directory]::GetFiles('\\.\pipe\'))){Add-Evidence $pipe 'Named pipe exists; no pipe connection or data exchange performed.'} }
-        46 { foreach($file in Get-BoundedFiles (Get-SearchRoots) -Depth 3 -Pattern '\.(config|xml)$'){if($file.Length-le$script:Context.MaxFileBytes){try{$text=[IO.File]::ReadAllText($file.FullName);if($text-match'(?i)system\.runtime\.remoting|SoapClient|SoapFormatter|typeFilterLevel'){Add-Evidence $file.FullName '.NET remoting/SOAP configuration marker; not proof of SOAPwn exposure.' @{Values='[REDACTED]'} 'Low'}}catch{Set-CheckPartial 'Some configuration files were unreadable.' -ErrorRecord $_}}} }
+        46 { foreach($file in Get-BoundedFiles (Get-SearchRoots) -Depth 3 -Pattern '\.(config|xml)$'){if($file.Length-le$script:Context.MaxFileBytes){try{$text=(Read-AssessmentText $file.FullName);if($text-match'(?i)system\.runtime\.remoting|SoapClient|SoapFormatter|typeFilterLevel'){Add-Evidence $file.FullName '.NET remoting/SOAP configuration marker; not proof of SOAPwn exposure.' @{Values='[REDACTED]'} 'Low'}}catch{Set-CheckPartial 'Some configuration files were unreadable.' -ErrorRecord $_}}} }
     }
 }
 function Get-SearchRoots {

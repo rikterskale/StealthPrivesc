@@ -7,7 +7,7 @@ function Invoke-LinkLocalMetadata {
     foreach($name in $Headers.Keys){$request.Headers[$name]=$Headers[$name]}
     if($Method-eq'PUT'){$request.ContentLength=0}
     $response=$null;$reader=$null
-    try{$response=$request.GetResponse();$reader=New-Object IO.StreamReader($response.GetResponseStream());$buffer=New-Object char[] 65537;$count=0;while($count-lt$buffer.Length){$read=$reader.Read($buffer,$count,$buffer.Length-$count);if(-not$read){break};$count+=$read};if($count-ge$buffer.Length){throw 'Metadata response exceeds limit.'};return [string]::new($buffer,0,$count)}
+    try{Add-AssessmentCounter NetworkRequests;$response=$request.GetResponse();$reader=New-Object IO.StreamReader($response.GetResponseStream());$buffer=New-Object char[] 65537;$count=0;while($count-lt$buffer.Length){$read=$reader.Read($buffer,$count,$buffer.Length-$count);if(-not$read){break};$count+=$read};if($count-ge$buffer.Length){throw 'Metadata response exceeds limit.'};return [string]::new($buffer,0,$count)}
     finally{if($reader){$reader.Dispose()};if($response){$response.Dispose()};$request.Abort()}
 }
 function Invoke-CloudAndToolsCheck {

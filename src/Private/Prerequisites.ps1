@@ -26,7 +26,7 @@ function New-PrerequisiteScanCommand {
         $enabled = Get-AttackPathValue $scope $flag
         if ($enabled -is [bool] -and $enabled) { $command += " -Include$flag" }
     }
-    foreach ($bound in @(@{Name='MaxItems';Min=10;Max=100000},@{Name='MaxFileBytes';Min=1024;Max=10485760},@{Name='CommandTimeoutSeconds';Min=1;Max=300})) {
+    foreach ($bound in @(@{Name='MaxItems';Min=10;Max=100000},@{Name='MaxFileBytes';Min=1024;Max=10485760},@{Name='CommandTimeoutSeconds';Min=1;Max=300},@{Name='CollectorTimeoutSeconds';Min=1;Max=3600},@{Name='MaxCollectorOutputCharacters';Min=1024;Max=8388608})) {
         $value = Get-AttackPathValue $scope $bound.Name
         # JSON can deserialize numbers as Int64. Reject executable/string values.
         if (($value -is [int] -or $value -is [long]) -and $value -ge $bound.Min -and $value -le $bound.Max) { $command += " -$($bound.Name) $value" }

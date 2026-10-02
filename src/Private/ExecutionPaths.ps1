@@ -47,8 +47,7 @@ function Get-ImagePublisher {
 function Add-LoadedModuleAccess {
     param([int]$ProcessId,[string]$Context)
     try{
-        $process=Get-Process -Id $ProcessId -ErrorAction Stop
-        foreach($module in Get-Limited @($process.Modules)){Add-ExecutableAccess $module.FileName "$Context loaded DLL/executable."}
+        foreach($module in Get-AssessmentProcessModules -ProcessId $ProcessId){Add-ExecutableAccess $module.FileName "$Context loaded DLL/executable."}
     }catch{Set-CheckPartial 'Some process module lists are inaccessible or the process exited.' -ErrorRecord $_}
 }
 function Get-DefaultDllSearchDirectories {

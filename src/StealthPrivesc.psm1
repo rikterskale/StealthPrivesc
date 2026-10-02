@@ -24,11 +24,14 @@ function Get-StealthPrivescCheck {
 function Invoke-StealthPrivesc {
     [CmdletBinding()]
     param(
-        [int[]]$CheckId, [string[]]$Category, [switch]$ListChecks,
+        [int[]]$CheckId, [string[]]$Category, [switch]$ListChecks, [switch]$Plan,
         [switch]$IncludeNetwork, [switch]$IncludeDomain, [switch]$IncludeSensitive,
         [ValidateRange(10,100000)][int]$MaxItems = 500,
         [ValidateRange(1024,10485760)][int]$MaxFileBytes = 1048576,
         [ValidateRange(1,300)][int]$CommandTimeoutSeconds = 15,
+        [ValidateRange(1,3600)][int]$CollectorTimeoutSeconds = 60,
+        [ValidateRange(1024,8388608)][int]$MaxCollectorOutputCharacters = 8388608,
+        [string]$NativeAssemblyDirectory,
         [string[]]$SearchRoot, [string]$OutputDirectory, [switch]$PassThru,
         [string]$DriverDatabasePath=(Join-Path $script:ModuleRoot '../data/reference/drivers.json'),
         [string]$VulnerabilityDatabasePath=(Join-Path $script:ModuleRoot '../data/reference/windows-updates.json')
@@ -36,6 +39,8 @@ function Invoke-StealthPrivesc {
     $ErrorActionPreference = 'Stop'
     $script:DiagnosticLogPath = $null
     $script:RunDiagnostics = New-Object 'System.Collections.Generic.List[object]'
+    $script:Current = $null
+    Initialize-AssessmentFootprint
     $identity = $null; $paths = $null; $failure = $null; $phase = 'Selection'
     $report = [ordered]@{
         SchemaVersion = '1.5'; ToolVersion = '0.2.1'; StartedUtc = [DateTime]::UtcNow.ToString('o')
@@ -44,7 +49,7 @@ function Invoke-StealthPrivesc {
         PowerShellVersion = $PSVersionTable.PSVersion.ToString()
         OperatingSystemArchitecture = $(if ([Environment]::Is64BitOperatingSystem) { 'x64' } else { 'x86' })
         CollectionView = $(if ([Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) { 'WOW64: registry and filesystem redirection apply; use x64 PowerShell for native system coverage.' } else { 'Native process registry and filesystem view.' })
-        Scope = [ordered]@{ Network = [bool]$IncludeNetwork; Domain = [bool]$IncludeDomain; Sensitive = [bool]$IncludeSensitive; MaxItems = $MaxItems; MaxFileBytes = $MaxFileBytes; CommandTimeoutSeconds = $CommandTimeoutSeconds }
+        Scope = [ordered]@{ Network = [bool]$IncludeNetwork; Domain = [bool]$IncludeDomain; Sensitive = [bool]$IncludeSensitive; MaxItems = $MaxItems; MaxFileBytes = $MaxFileBytes; CommandTimeoutSeconds = $CommandTimeoutSeconds; CollectorTimeoutSeconds=$CollectorTimeoutSeconds; MaxCollectorOutputCharacters=$MaxCollectorOutputCharacters }
         Notice = 'Evidence is redacted. Findings are candidates unless explicitly stated; access tests use the current token. Missing evidence is not a clean bill of health.'
         Checks = New-Object 'System.Collections.Generic.List[object]'
         Diagnostics = $script:RunDiagnostics
@@ -52,6 +57,9 @@ function Invoke-StealthPrivesc {
     try {
         $catalog = @(Get-StealthPrivescCheck -CheckId $CheckId -Category $Category)
         if ($ListChecks) { return $catalog }
+        $assessmentPlan = Get-AssessmentPlan -CheckId $CheckId -Category $Category -IncludeNetwork:$IncludeNetwork -IncludeDomain:$IncludeDomain -IncludeSensitive:$IncludeSensitive
+        if ($Plan) { return $assessmentPlan }
+        $report.AssessmentPlan = $assessmentPlan
         if ($OutputDirectory) {
             $phase = 'Logging'
             $paths = Initialize-AssessmentOutput -Directory $OutputDirectory
@@ -59,21 +67,17 @@ function Invoke-StealthPrivesc {
         }
         $phase = 'Initialization'
         if ($env:OS -ne 'Windows_NT') { throw [PlatformNotSupportedException]::new('Scanning requires Windows. -ListChecks can be used on other platforms.') }
-        foreach ($nativeType in @('Native','NativeInspection','NativeObjects','Console')) {
-            if (-not ("StealthPrivesc.$nativeType" -as [type])) {
-                Write-Verbose "Loading native support: $nativeType"
-                $nativeSource = if ($nativeType -eq 'Console') { 'NativeConsole.cs' } else { "$nativeType.cs" }
-                Add-Type -Path (Join-Path $script:ModuleRoot $nativeSource) -ErrorAction Stop
-            }
-        }
         $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
         $principal = New-Object Security.Principal.WindowsPrincipal($identity)
         $script:Context = @{
             MaxItems = $MaxItems; MaxFileBytes = $MaxFileBytes; CommandTimeoutSeconds = $CommandTimeoutSeconds
+            CollectorTimeoutSeconds=$CollectorTimeoutSeconds; MaxCollectorOutputCharacters=$MaxCollectorOutputCharacters
+            NativeAssemblyDirectory=$NativeAssemblyDirectory; CheckPlans=@{}
             IncludeNetwork = [bool]$IncludeNetwork; IncludeDomain = [bool]$IncludeDomain; IncludeSensitive = [bool]$IncludeSensitive
             SearchRoot = @($SearchRoot); Cache = @{}; Elevated = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
             DriverDatabasePath=$DriverDatabasePath;VulnerabilityDatabasePath=$VulnerabilityDatabasePath
         }
+        foreach ($plannedCheck in $assessmentPlan.Checks) { $script:Context.CheckPlans[[int]$plannedCheck.Id] = $plannedCheck }
         $report.User = $identity.Name; $report.UserSid = $identity.User.Value; $report.Elevated = $script:Context.Elevated
         $phase = 'Assessment'
         foreach ($check in $catalog) {
@@ -93,12 +97,13 @@ function Invoke-StealthPrivesc {
                 elseif ($check.Scope -eq 'Domain' -and -not $IncludeDomain) { Set-CheckSkipped 'Requires -IncludeDomain (queries the joined domain).' -SkipReason ScopeNotEnabled -RequiredSwitch IncludeDomain }
                 elseif ($check.Scope -eq 'Network' -and -not $IncludeNetwork) { Set-CheckSkipped 'Requires -IncludeNetwork.' -SkipReason ScopeNotEnabled -RequiredSwitch IncludeNetwork }
                 elseif ($check.Scope -eq 'Sensitive' -and -not $IncludeSensitive) { Set-CheckSkipped 'Requires -IncludeSensitive; values remain redacted.' -SkipReason ScopeNotEnabled -RequiredSwitch IncludeSensitive }
-                else { Invoke-Check -Id $check.Id }
+                else { Invoke-BudgetedCollector -Collector { Invoke-Check -Id $check.Id } -TimeoutSeconds $CollectorTimeoutSeconds -MaximumOutputCharacters $MaxCollectorOutputCharacters }
             } catch {
-                $script:Current.Status = 'Error'
-                $reason = 'This check could not finish. Any findings already collected are retained; other checks will continue.'
+                $budgetFailure = Test-CollectorBudgetException $_.Exception
+                $script:Current.Status = if ($budgetFailure) { 'Partial' } else { 'Error' }
+                $reason = if ($budgetFailure) { 'This check reached a collection time, output or read budget. Collected findings are retained; review the configured limits.' } else { 'This check could not finish. Any findings already collected are retained; other checks will continue.' }
                 $script:Current.Limitations.Add($reason)
-                Add-CheckDiagnostic -Reason $reason -ErrorRecord $_ -Level Error
+                Add-CheckDiagnostic -Reason $reason -ErrorRecord $_ -Level $(if ($budgetFailure) { 'Warning' } else { 'Error' })
             }
             $script:Current.DurationMs = $timer.ElapsedMilliseconds
             $report.Checks.Add([pscustomobject]$script:Current)
@@ -130,6 +135,8 @@ function Invoke-StealthPrivesc {
     $report.Summary = [ordered]@{}
     foreach ($status in @('Completed','Partial','Skipped','Unsupported','Error')) { $report.Summary[$status] = @($report.Checks | Where-Object Status -eq $status).Count }
     $report.SkippedChecks = @(Get-SkippedCheckSummary -Checks @($report.Checks | ForEach-Object { $_ }))
+    $script:Current = $null
+    $report.Footprint = Measure-AssessmentFootprint
     if ($paths) {
         try { Export-Assessment -Report $report -Directory $OutputDirectory -Paths $paths }
         catch {
@@ -162,4 +169,4 @@ function Invoke-StealthPrivesc {
     $report.Checks | Select-Object Id, Category, Status, @{n='Findings';e={$_.Findings.Count}}, Title | Format-Table -AutoSize
     Write-Host ('Completed: {0}; Partial: {1}; Skipped: {2}; Unsupported: {3}; Errors: {4}' -f $report.Summary.Completed,$report.Summary.Partial,$report.Summary.Skipped,$report.Summary.Unsupported,$report.Summary.Error)
 }
-Export-ModuleMember -Function Invoke-StealthPrivesc, Get-StealthPrivescCheck, Get-StealthPrivescAttackPathAnalysis
+Export-ModuleMember -Function Invoke-StealthPrivesc, Get-StealthPrivescCheck, Get-StealthPrivescAttackPathAnalysis, Get-AssessmentPlan, Measure-AssessmentFootprint

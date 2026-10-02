@@ -1,9 +1,5 @@
 function Initialize-WifiNativeType {
-    if ('StealthPrivesc.NativeWifi' -as [type]) { return }
-    $options = @{ Path = (Join-Path $script:ModuleRoot 'NativeWifi.cs'); ErrorAction = 'Stop' }
-    # Windows PowerShell's compiler does not reference System.Xml by default.
-    if ($PSVersionTable.PSEdition -eq 'Desktop') { $options.ReferencedAssemblies = @('System.Xml.dll') }
-    Add-Type @options
+    Initialize-RequiredNativeSupport NativeWifi
 }
 
 function Invoke-WifiCheck {

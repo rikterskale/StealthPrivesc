@@ -38,5 +38,7 @@ function Invoke-Check {
     }
     $command = if ($arguments.Count) { "$collector -Id $Id" } else { $collector }
     Add-CheckCommand -Kind Collector -Command $command -Detail 'Internal module collector; use RerunCommand to initialize its context and native dependencies.'
+    $planned = if ($script:Context.ContainsKey('CheckPlans') -and $script:Context.CheckPlans.ContainsKey($Id)) { $script:Context.CheckPlans[$Id] } else { (Get-AssessmentPlan -CheckId $Id -IncludeNetwork -IncludeDomain -IncludeSensitive).Checks[0] }
+    Initialize-RequiredNativeSupport -Name $planned.NativeTypes
     & $collector @arguments
 }
