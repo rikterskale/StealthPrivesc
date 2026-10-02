@@ -2,6 +2,6 @@ attrs==25.3.0
 jsonschema==4.23.0
 jsonschema-specifications==2024.10.1
 referencing==0.36.2
-rpds-py==0.30.0
+rpds-py==2026.6.3
 PyYAML==6.0.3
 typing_extensions==4.13.2
