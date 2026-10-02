@@ -1,3 +1,30 @@
+function Get-NetworkInterfaceInventory {
+    Add-CheckCommand PowerShell 'Get-NetIPConfiguration -ErrorAction Stop'
+    try { $configurations = @(Get-NetIPConfiguration -ErrorAction Stop) }
+    catch {
+        if (Test-CollectorBudgetException $_.Exception) { throw }
+        Set-CheckPartial 'Network configuration wrapper failed; interface addresses are collected from direct IP inventory instead.' -ErrorRecord $_
+        Add-CheckCommand PowerShell 'Get-NetIPInterface -PolicyStore ActiveStore -ErrorAction Stop | Group-Object InterfaceIndex'
+        $interfaces = @(Get-Limited @(Get-NetIPInterface -PolicyStore ActiveStore -ErrorAction Stop | Group-Object InterfaceIndex))
+        # An unfiltered query also handles interfaces that have no addresses,
+        # without the filtered cmdlet's object-not-found error or repeated queries.
+        Add-CheckCommand PowerShell 'Get-NetIPAddress -PolicyStore ActiveStore -ErrorAction Stop'
+        $addresses = @(Get-NetIPAddress -PolicyStore ActiveStore -ErrorAction Stop)
+        foreach ($interface in $interfaces) {
+            Assert-CollectorBudget
+            $interfaceIndex = [int]$interface.Name
+            $interfaceAddresses = @(Get-Limited @($addresses | Where-Object InterfaceIndex -eq $interfaceIndex))
+            [pscustomobject]@{
+                InterfaceIndex=$interfaceIndex; InterfaceAlias=[string]$interface.Group[0].InterfaceAlias
+                IPv4Address=@($interfaceAddresses | Where-Object { [string]$_.AddressFamily -in @('IPv4','2') })
+                IPv6Address=@($interfaceAddresses | Where-Object { [string]$_.AddressFamily -in @('IPv6','23') })
+            }
+        }
+        return
+    }
+    Get-Limited $configurations
+}
+
 function Invoke-InventoryCheck {
     param([int]$Id)
     switch($Id){
@@ -25,7 +52,7 @@ function Invoke-InventoryCheck {
         }
         129 {foreach($disk in Get-Limited @(Get-CimInstance Win32_LogicalDisk -ErrorAction Stop)){Add-Evidence $disk.DeviceID 'Logical disk or mapped drive.' ($disk|Select-Object DeviceID,DriveType,FileSystem,Size,FreeSpace,ProviderName)};foreach($share in Get-Limited @(Get-CimInstance Win32_Share -ErrorAction Stop)){Add-Evidence $share.Name 'Local share.' ($share|Select-Object Name,Path,Type,Description)};foreach($volume in Get-Limited @(Get-Volume -ErrorAction Stop)){Add-Evidence $volume.UniqueId 'Volume, including volumes without drive letters.' ($volume|Select-Object DriveLetter,FileSystemLabel,FileSystem,Path,Size,SizeRemaining,HealthStatus)};foreach($partition in Get-Limited @(Get-Partition -ErrorAction Stop)){Add-Evidence "$($partition.DiskNumber)/$($partition.PartitionNumber)" 'Partition and mounted-folder access paths.' ($partition|Select-Object DiskNumber,PartitionNumber,AccessPaths,Type,Size)}}
         130 {
-            foreach($adapter in Get-Limited @(Get-NetIPConfiguration -ErrorAction Stop)){Add-Evidence $adapter.InterfaceAlias 'Network interface addresses.' @{InterfaceIndex=$adapter.InterfaceIndex;IPv4=@($adapter.IPv4Address|ForEach-Object IPAddress);IPv6=@($adapter.IPv6Address|ForEach-Object IPAddress)}}
+            foreach($adapter in Get-NetworkInterfaceInventory){Add-Evidence $adapter.InterfaceAlias 'Network interface addresses.' @{InterfaceIndex=$adapter.InterfaceIndex;IPv4=@($adapter.IPv4Address|ForEach-Object IPAddress);IPv6=@($adapter.IPv6Address|ForEach-Object IPAddress)}}
             foreach($route in Get-Limited @(Get-NetRoute -ErrorAction Stop)){Add-Evidence $route.DestinationPrefix 'Route.' ($route|Select-Object InterfaceIndex,DestinationPrefix,NextHop,RouteMetric)}
             foreach($entry in Get-Limited @(Get-NetNeighbor -ErrorAction Stop)){Add-Evidence $entry.IPAddress 'Neighbor cache.' ($entry|Select-Object InterfaceIndex,IPAddress,LinkLayerAddress,State)}
             foreach($profile in Get-NetConnectionProfile -ErrorAction Stop){Add-Evidence $profile.Name 'Network profile.' ($profile|Select-Object Name,InterfaceAlias,NetworkCategory,IPv4Connectivity,IPv6Connectivity)}
