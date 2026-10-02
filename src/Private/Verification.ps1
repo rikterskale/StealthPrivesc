@@ -12,13 +12,14 @@ function New-CheckVerification {
     foreach ($name in @('IncludeNetwork','IncludeDomain','IncludeSensitive')) {
         if ($script:Context[$name]) { $command += " -$name" }
     }
-    foreach ($name in @('MaxItems','MaxFileBytes','CommandTimeoutSeconds')) {
+    foreach ($name in @('MaxItems','MaxFileBytes','CommandTimeoutSeconds','CollectorTimeoutSeconds','MaxCollectorOutputCharacters')) {
+        if (-not $script:Context.ContainsKey($name)) { continue }
         $command += " -$name $($script:Context[$name])"
     }
     if (@($script:Context.SearchRoot | Where-Object { $_ }).Count) {
         $command += ' -SearchRoot ' + ((@($script:Context.SearchRoot | ForEach-Object { ConvertTo-VerificationLiteral $_ })) -join ',')
     }
-    foreach ($name in @('DriverDatabasePath','VulnerabilityDatabasePath')) {
+    foreach ($name in @('DriverDatabasePath','VulnerabilityDatabasePath','NativeAssemblyDirectory')) {
         if ($script:Context[$name]) { $command += " -$name " + (ConvertTo-VerificationLiteral $script:Context[$name]) }
     }
     [pscustomobject]@{
@@ -40,6 +41,8 @@ function Add-CheckCommand {
         [ValidateSet('Attempted','Reused')][string]$State = 'Attempted',
         [object]$SourceCheckId = $null
     )
+    if ($State -eq 'Reused') { Add-AssessmentCounter ReusedQueries }
+    elseif ($Kind -in @('PowerShell','NativeApi')) { Add-AssessmentCounter QueryAttempts }
     $currentVariable = Get-Variable -Name Current -Scope Script -ErrorAction SilentlyContinue
     if (-not $currentVariable -or -not $script:Current.Contains('Verification')) { return }
     $verification = $script:Current.Verification
@@ -82,7 +85,7 @@ function Get-CheckSourceReferences {
     $visited = @{}
     $references = New-Object 'System.Collections.Generic.List[object]'
     $root = [IO.Path]::GetFullPath($script:ModuleRoot).TrimEnd('\','/') + [IO.Path]::DirectorySeparatorChar
-    $excluded = '^(Add-Evidence|Add-CheckCommand|Set-CheckPartial|Set-CheckSkipped|.*Diagnostic.*|.*Verification.*|Get-CheckSourceReferences|Export-Assessment|Invoke-Check|Get-CheckCollector)$'
+    $excluded = '^(Add-Evidence|Add-CheckCommand|Add-AssessmentCounter|Assert-CollectorBudget|Get-CollectorHelperTimeout|Initialize-RequiredNativeSupport|Get-NativeSupportDefinition|Set-CheckPartial|Set-CheckSkipped|.*Diagnostic.*|.*Verification.*|Get-CheckSourceReferences|Export-Assessment|Invoke-Check|Get-CheckCollector)$'
     while ($pending.Count) {
         $name = $pending.Dequeue()
         if ($visited.ContainsKey($name) -or $name -match $excluded) { continue }

@@ -16,7 +16,7 @@ function New-AssessmentDiagnostic {
         [string[]]$EnabledSwitches = @()
     )
     $exceptionTypes = @()
-    $nativeCode = $null; $hresult = $null; $exitCode = $null; $timeout = $null
+    $nativeCode = $null; $hresult = $null; $exitCode = $null; $timeout = $null; $budgetKind=$null
     $errorCategory = $null; $source = $null; $line = $null
     if ($ErrorRecord) {
         $errorCategory = [string]$ErrorRecord.CategoryInfo.Category
@@ -28,6 +28,7 @@ function New-AssessmentDiagnostic {
             # Only our numeric metadata is carried across a subprocess boundary.
             if ($exception.Data['StealthPrivesc.ExitCode'] -is [int]) { $exitCode = $exception.Data['StealthPrivesc.ExitCode'] }
             if ($exception.Data['StealthPrivesc.TimeoutSeconds'] -is [int]) { $timeout = $exception.Data['StealthPrivesc.TimeoutSeconds'] }
+            if ($exception.Data['StealthPrivesc.BudgetKind'] -in @('CollectorTime','FindingOutput','HelperTime','HelperOutput','FileBytes')) { $budgetKind=$exception.Data['StealthPrivesc.BudgetKind'] }
             $exception = $exception.InnerException
         }
         $invocation = $ErrorRecord.InvocationInfo
@@ -46,7 +47,19 @@ function New-AssessmentDiagnostic {
     $code = 'CollectionIncomplete'
     $explanation = 'The collector could not obtain all of the requested information. The exact cause is not known.'
     $steps = @('Review the affected resource and technical details below. Retry only the affected check after verifying that the resource is available.', 'If it repeats, share the check ID, diagnostic code, source location and tool/PowerShell versions with the project maintainer.')
-    if ($types -match 'UnauthorizedAccessException|SecurityException' -or $errorCategory -eq 'PermissionDenied' -or $nativeCode -in @(5,1314) -or $hresult -in @('0x80070005','0x80041003')) {
+    if ($budgetKind-eq'CollectorTime') {
+        $code='CollectorBudget'
+        $explanation='This check reached its cooperative collection deadline. Findings already collected are retained.'
+        $steps=@('Narrow the check selection or applicable search roots.', 'If the larger assessment is intended, adjust -CollectorTimeoutSeconds (1-3600). Blocking non-helper API calls are not universally interruptible.')
+    } elseif ($budgetKind-in@('FindingOutput','HelperOutput')) {
+        $code='CollectorOutputLimit'
+        $explanation='Serialized findings or helper output reached the capture limit, or a helper output stream could not be read.'
+        $steps=@('Narrow the check or reduce -MaxItems.', 'If a larger capture is intended, adjust -MaxCollectorOutputCharacters (1024-8388608). Existing findings are retained.')
+    } elseif ($budgetKind-eq'FileBytes') {
+        $code='FileSizeLimit'
+        $explanation='The file exceeded its read budget. The read stopped without retaining an excerpt.'
+        $steps=@('Narrow the input files or increase -MaxFileBytes within its documented range when appropriate.', 'Reference and parser limits can be fixed independently of MaxFileBytes.')
+    } elseif ($types -match 'UnauthorizedAccessException|SecurityException' -or $errorCategory -eq 'PermissionDenied' -or $nativeCode -in @(5,1314) -or $hresult -in @('0x80070005','0x80041003')) {
         $code = 'AccessDenied'
         $explanation = 'The account running this scan does not have permission to read the requested resource, or a security policy blocked the operation.'
         $steps = @('Verify which account is running PowerShell and whether it should have read access to this resource.', 'If administrative inventory is intended, use an approved elevated PowerShell session. Elevation changes the identity/access being assessed; keep a separate run for the original user.', 'If access is intentionally restricted, retain this result as incomplete coverage; do not loosen permissions just to make the check pass.')
@@ -196,7 +209,7 @@ function Write-DiagnosticLog {
     if (-not $script:DiagnosticLogPath) { return }
     try {
         $text = "[$($Diagnostic.TimestampUtc)] " + (Format-AssessmentDiagnostic $Diagnostic) + [Environment]::NewLine + [Environment]::NewLine
-        [IO.File]::AppendAllText($script:DiagnosticLogPath, $text, [Text.UTF8Encoding]::new($false))
+        Write-AssessmentText -Path $script:DiagnosticLogPath -Text $text -Append
     } catch {
         $script:DiagnosticLogPath = $null
         $failure = New-AssessmentDiagnostic -Reason 'The troubleshooting log could not be updated. Diagnostics remain in memory and will be included in the final reports if export succeeds.' -ErrorRecord $_ -Level Error -Phase Logging
@@ -239,7 +252,7 @@ function Initialize-AssessmentOutput {
     [void][IO.Directory]::CreateDirectory($path)
     $stamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ') + '-' + [Guid]::NewGuid().ToString('N').Substring(0,6)
     $paths = @{ Json = (Join-Path $path "assessment-$stamp.json"); Html = (Join-Path $path "assessment-$stamp.html"); Log = (Join-Path $path "assessment-$stamp.log") }
-    [IO.File]::WriteAllText($paths.Log, "StealthPrivesc troubleshooting log`r`nStarted UTC: $([DateTime]::UtcNow.ToString('o'))`r`nPowerShell: $($PSVersionTable.PSVersion); 64-bit process: $([Environment]::Is64BitProcess)`r`nRaw exception messages, command arguments and subprocess output are omitted to protect sensitive data.`r`n`r`n", [Text.UTF8Encoding]::new($false))
+    Write-AssessmentText -Path $paths.Log -Text "StealthPrivesc troubleshooting log`r`nStarted UTC: $([DateTime]::UtcNow.ToString('o'))`r`nPowerShell: $($PSVersionTable.PSVersion); 64-bit process: $([Environment]::Is64BitProcess)`r`nRaw exception messages, command arguments and subprocess output are omitted to protect sensitive data.`r`n`r`n"
     $script:DiagnosticLogPath = $paths.Log
     $paths
 }

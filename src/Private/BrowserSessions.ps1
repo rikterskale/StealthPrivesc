@@ -2,9 +2,9 @@ function Add-BrowserSessionEvidence {
     param([string]$Path,[switch]$Firefox)
     $file=Get-Item -LiteralPath $Path -ErrorAction Stop
     if($file.Length-gt$script:Context.MaxFileBytes){Set-CheckPartial 'Browser session file exceeds MaxFileBytes.';return}
-    if(-not('StealthPrivesc.NativeSessions'-as[type])){Add-Type -Path (Join-Path $script:ModuleRoot 'NativeSessions.cs')}
+    Initialize-RequiredNativeSupport NativeSessions
     try{
-        $bytes=[IO.File]::ReadAllBytes($Path)
+        $bytes=(Read-AssessmentBytes $Path)
         if($Firefox){
             $document=[StealthPrivesc.NativeSessions]::Firefox($bytes,$script:Context.MaxFileBytes)|ConvertFrom-Json
             foreach($window in @($document.windows)){foreach($tab in Get-Limited @($window.tabs)){if($tab.index-ge1-and$tab.index-le@($tab.entries).Count){Add-Evidence $Path 'Firefox tab from a persisted session snapshot; current live state may differ.' @{Origin=(Get-RedactedUrl $tab.entries[$tab.index-1].url);SelectedNavigation=$tab.index}}}}

@@ -17,7 +17,8 @@ Required stages are:
    documentation links and command paths using both separator styles, action pins,
    and regression tests for the checker itself.
 2. `actionlint` workflow validation using a checksum-verified tool.
-3. Four Pester suites per cell: source/manifest/dispatch and real CLI listing;
+3. Five Pester suites per cell: assessment planning/caches/budgets/measurement,
+   source/manifest/dispatch and real CLI listing;
    offline diagnostics, gates, limits and redaction; reference applicability;
    synthetic report export and offline analysis. C# is compiled without invoking
    its APIs. No memory-patching or evasion behavior is exercised.

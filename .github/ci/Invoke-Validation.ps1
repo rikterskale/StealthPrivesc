@@ -34,7 +34,7 @@ try {
     $summary.Command="& '"+$hostPath.Replace("'","''")+"' -NoLogo -NoProfile -NonInteractive -File '"+(Join-Path $PSScriptRoot 'Invoke-Validation.ps1').Replace("'","''")+"' "+($quoted -join ' ')
     $pins=Import-PowerShellDataFile (Join-Path $PSScriptRoot 'dependencies.psd1')
     Import-Module (Join-Path $ModulesDirectory "Pester/$($pins.Pester)/Pester.psd1") -Force -ErrorAction Stop
-    foreach($suite in @('Sources','Offline','ReferenceData','Reports')) {
+    foreach($suite in @('Sources','Offline','ReferenceData','Reports','Assessment')) {
         if(-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot "suites/$suite.Tests.ps1"))){throw "Missing required suite $suite."}
     }
     $env:SP_CI_RESULTS=$results

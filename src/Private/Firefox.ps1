@@ -7,13 +7,17 @@ function Invoke-FirefoxRecoveryProbe {
     if($signature.Status-ne'Valid'-or-not$signature.SignerCertificate-or$signature.SignerCertificate.Subject-notmatch'Mozilla Corporation'){Set-CheckPartial 'Firefox NSS runtime publisher could not be verified.';return @()}
     try { $helperPath=Get-WindowsPowerShellPath -Architecture (Get-ImageArchitecture $library) }
     catch { Set-CheckPartial 'Firefox NSS runtime architecture could not be determined.' -ErrorRecord $_;return @() }
-    $payload=@{Source=(Join-Path $script:ModuleRoot 'NativeNss.cs');Library=$library;Path=$Path;MaxItems=$script:Context.MaxItems;MaxBytes=$script:Context.MaxFileBytes}|ConvertTo-Json -Compress
+    $assemblyDirectory=if($script:Context.ContainsKey('NativeAssemblyDirectory')){$script:Context.NativeAssemblyDirectory}else{$null}
+    $payload=@{ModuleRoot=$script:ModuleRoot;NativeAssemblyDirectory=$assemblyDirectory;Library=$library;Path=$Path;MaxItems=$script:Context.MaxItems;MaxBytes=$script:Context.MaxFileBytes}|ConvertTo-Json -Compress
     $encodedPayload=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload))
     $code=@'
 $ErrorActionPreference='Stop'
 $p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__PAYLOAD__'))|ConvertFrom-Json
 if((Get-Item -LiteralPath $p.Path).Length-gt$p.MaxBytes){throw 'Firefox login file too large'}
-if(-not('StealthPrivesc.NativeNss'-as[type])){Add-Type -Path $p.Source -ErrorAction Stop}
+$script:ModuleRoot=$p.ModuleRoot
+. (Join-Path $p.ModuleRoot 'Private/Assessment.ps1')
+$script:Context=@{NativeAssemblyDirectory=$p.NativeAssemblyDirectory}
+Initialize-RequiredNativeSupport NativeNss
 $data=Get-Content -LiteralPath $p.Path -Raw|ConvertFrom-Json
 $entries=@($data.logins|Select-Object -First $p.MaxItems)
 $results=[StealthPrivesc.NativeNss]::Inspect($p.Library,[IO.Path]::GetDirectoryName($p.Path),[string[]]@($entries|ForEach-Object encryptedPassword))

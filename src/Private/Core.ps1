@@ -1,7 +1,23 @@
 function Add-Evidence {
     param([string]$Target, [string]$Observation, [object]$Evidence = @{}, [ValidateSet('Information','Low','Medium','High')][string]$Severity = 'Information', [string]$Remediation = '')
+    Assert-CollectorBudget
     if ($script:Current.Findings.Count -ge $script:Context.MaxItems) { Set-CheckPartial 'Finding limit reached; results are truncated.'; return }
-    $script:Current.Findings.Add([pscustomobject]@{ Severity=$Severity; Target=$Target; Observation=$Observation; Evidence=$Evidence; Remediation=$Remediation })
+    $finding = [pscustomobject]@{ Severity=$Severity; Target=$Target; Observation=$Observation; Evidence=$Evidence; Remediation=$Remediation }
+    $serialized = $finding | ConvertTo-Json -Depth 16 -Compress
+    $bytes = [Text.Encoding]::UTF8.GetByteCount($serialized)
+    if ($script:Context.ContainsKey('CollectorBudget') -and $script:Context.CollectorBudget) {
+        $budget = $script:Context.CollectorBudget
+        $characters = $serialized.Length + 1
+        if ($budget.FindingCharacters + $characters -gt $budget.MaximumOutputCharacters) {
+            $failure = [IO.InvalidDataException]::new('Collector findings exceeded the serialized output budget.')
+            $failure.Data['StealthPrivesc.BudgetExceeded'] = $true
+            $failure.Data['StealthPrivesc.BudgetKind'] = 'FindingOutput'
+            throw $failure
+        }
+        $budget.FindingCharacters += $characters
+    }
+    $script:Current.Findings.Add($finding)
+    Add-AssessmentCounter FindingBytes $bytes
 }
 function Set-CheckPartial {
     param([string]$Reason, [System.Management.Automation.ErrorRecord]$ErrorRecord)
@@ -17,6 +33,7 @@ function Set-CheckSkipped {
 function Get-Cached {
     param([string]$Key, [scriptblock]$Factory)
     $cacheHit = $script:Context.Cache.ContainsKey($Key)
+    if ($cacheHit) { Add-AssessmentCounter CacheHits } else { Add-AssessmentCounter CacheMisses }
     if (-not $script:Context.Cache.ContainsKey($Key)) {
         $before=@($script:Current.Limitations)
         $diagnosticsBefore = if ($script:Current.Contains('Diagnostics')) { @($script:Current.Diagnostics | ForEach-Object { $_ }) } else { @() }
@@ -72,6 +89,7 @@ function Get-Applications {
 }
 function Get-RegistryChildren {
     param([string]$Path)
+    Assert-CollectorBudget
     if($script:RegistryVisited -ge $script:Context.MaxItems){Set-CheckPartial 'Registry enumeration item limit reached.';return}
     try {
         $remaining=$script:Context.MaxItems-$script:RegistryVisited
@@ -86,6 +104,17 @@ function Get-RegistryChildren {
 }
 function Read-Registry {
     param([string]$Path, [string]$Name)
+    Assert-CollectorBudget
+    # Cache only explicit non-secret configuration. Credential values stay out of
+    # the shared cache, even when a sensitive collector reads them more than once.
+    $policy = $Path -match '(?i)\\SOFTWARE\\Policies\\' -and $Name -notmatch '(?i)password|token|secret|credential|key'
+    $known = $Name -in @('AlwaysInstallElevated','EnableLUA','ConsentPromptBehaviorAdmin','PromptOnSecureDesktop','FilterAdministratorToken','LocalAccountTokenFilterPolicy','RunAsPPL','RunAsPPLBoot','LsaCfgFlags','LmCompatibilityLevel','NoLMHash','UBR','DisplayVersion','CurrentBuildNumber')
+    if ($policy -or $known) { Get-CachedHostInventory RegistryValue ($Path + '|' + $Name) { Read-UncachedRegistry -Path $Path -Name $Name } }
+    else { Read-UncachedRegistry -Path $Path -Name $Name }
+}
+function Read-UncachedRegistry {
+    param([string]$Path, [string]$Name)
+    Add-AssessmentCounter RegistryReads
     try {
         Add-CheckCommand PowerShell ('Get-Item -LiteralPath ' + (ConvertTo-VerificationLiteral $Path) + ' -ErrorAction Stop')
         $key = Get-Item -LiteralPath $Path -ErrorAction Stop
@@ -118,6 +147,7 @@ function Get-BoundedFiles {
     foreach($root in $Roots) { if($root -and (Test-AllowedLocalPath $root)){ $queue.Enqueue(@($root,0)) } }
     $visited=0
     while($queue.Count -and $visited -lt $script:Context.MaxItems) {
+        Assert-CollectorBudget
         $entry=$queue.Dequeue()
         try {
             Add-CheckCommand PowerShell ('Get-Item -LiteralPath ' + (ConvertTo-VerificationLiteral $entry[0]) + ' -Force -ErrorAction Stop')
@@ -158,8 +188,13 @@ function Get-UnquotedCandidates {
 }
 function Test-PathAccess {
     param([string]$Path, [switch]$Registry)
+    Get-CachedHostInventory Acl (([bool]$Registry).ToString() + '|' + $Path) { Test-UncachedPathAccess -Path $Path -Registry:$Registry }
+}
+function Test-UncachedPathAccess {
+    param([string]$Path, [switch]$Registry)
     try {
         if(-not $Registry -and -not (Test-AllowedLocalPath $Path)){return $null}
+        Add-AssessmentCounter AclQueries
         Add-CheckCommand PowerShell ('Get-Acl -LiteralPath ' + (ConvertTo-VerificationLiteral $Path) + ' -ErrorAction Stop')
         $acl=Get-Acl -LiteralPath $Path -ErrorAction Stop
         $descriptor=$acl.GetSecurityDescriptorBinaryForm()
@@ -193,21 +228,32 @@ function Add-ExecutableAccess {
     if([IO.Path]::IsPathRooted($path)){ Add-WritablePath ([IO.Path]::GetDirectoryName($path)) "$Reason (parent directory candidate; replacement semantics require validation)." }
 }
 function Invoke-ReadOnlyCommand {
-    param([string]$FileName, [string]$Arguments, [string]$Payload, [string]$HostPath)
+    param([string]$FileName, [string]$Arguments, [string]$Payload, [string]$HostPath,
+        [ValidateRange(0,3600)][int]$TimeoutSeconds=0, [ValidateRange(1024,8388608)][int]$MaximumOutputCharacters=8388608)
+    Assert-CollectorBudget
+    $seconds = Get-CollectorHelperTimeout
+    if ($TimeoutSeconds) { $seconds = [Math]::Min($seconds,$TimeoutSeconds) }
+    if ($script:Context.ContainsKey('MaxCollectorOutputCharacters')) { $MaximumOutputCharacters = [Math]::Min($MaximumOutputCharacters,$script:Context.MaxCollectorOutputCharacters) }
+    Initialize-RequiredNativeSupport Console
+    Add-AssessmentCounter HelperLaunchAttempts
     if ($null -ne $Payload -and $Payload.Length -gt 0) {
         # Read the complete script from standard input without recording its contents.
         $target = if ($null -ne $HostPath -and $HostPath.Length -gt 0) { $HostPath } else { (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') }
         $reader = '[Console]::InputEncoding = [Text.Encoding]::UTF8; [Console]::OutputEncoding = [Text.Encoding]::UTF8; & ([scriptblock]::Create([Console]::In.ReadToEnd()))'
         $command = '& ' + (ConvertTo-VerificationLiteral $target) + ' -STA -NoLogo -NoProfile -NonInteractive -Command ' + (ConvertTo-VerificationLiteral $reader)
         Add-CheckCommand PowerShell $command -Detail 'Helper reads the complete UTF-8 script from standard input; script contents are omitted. Use the check rerun command to reproduce the query. A start failure, nonzero exit or timeout is reported in Diagnostics.'
-        if (-not ('StealthPrivesc.Console' -as [type])) { Add-Type -Path (Join-Path $script:ModuleRoot 'NativeConsole.cs') -ErrorAction Stop }
-        [StealthPrivesc.Console]::Ps($target, $Payload, $script:Context.CommandTimeoutSeconds, 8MB)
+        $output = [StealthPrivesc.Console]::Ps($target, $Payload, $seconds, $MaximumOutputCharacters)
+        Add-AssessmentCounter HelperOutputCharacters $output.Length
+        Assert-CollectorBudget
+        $output
         return
     }
     $recordedArguments = Get-HelperVerificationArguments $FileName $Arguments
     Add-CheckCommand Process (('& ' + (ConvertTo-VerificationLiteral $FileName) + ' ' + $recordedArguments).TrimEnd()) -Detail 'ProcessStartInfo invocation with UseShellExecute=false, displayed in PowerShell syntax for manual use. Arguments are verbatim only for known fixed queries; other payloads are redacted. A start failure, nonzero exit or timeout is reported in Diagnostics.'
-    if (-not ('StealthPrivesc.Console' -as [type])) { Add-Type -Path (Join-Path $script:ModuleRoot 'NativeConsole.cs') -ErrorAction Stop }
-    [StealthPrivesc.Console]::Run($FileName, $Arguments, $script:Context.CommandTimeoutSeconds, 8MB)
+    $output = [StealthPrivesc.Console]::Run($FileName, $Arguments, $seconds, $MaximumOutputCharacters)
+    Add-AssessmentCounter HelperOutputCharacters $output.Length
+    Assert-CollectorBudget
+    $output
 }
 function Find-SecretMarkers {
     param([string]$Path)
@@ -217,7 +263,7 @@ function Find-SecretMarkers {
         if($file.PSIsContainer -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint)){return}
         if($file.Length -gt $script:Context.MaxFileBytes){ Set-CheckPartial 'Some files exceeded MaxFileBytes and were not read.'; return }
         # Content and matched values never enter the report.
-        $content=[IO.File]::ReadAllText($file.FullName)
+        $content=Read-AssessmentText $file.FullName
         $patterns=[ordered]@{
             PasswordAssignment='(?i)(?:password|passwd|pwd|cpassword)\s*["'']?\s*[:=]|<Password>|<Value>.*</Value>\s*</Password>'
             TokenAssignment='(?i)(?:api[_-]?key|access[_-]?token|client[_-]?secret|secret[_-]?access[_-]?key)\s*["'']?\s*[:=]'
@@ -265,6 +311,8 @@ function Export-Assessment {
     [void]$html.Append('<p>'+[Net.WebUtility]::HtmlEncode($Report.Notice)+'</p><p>'+[Net.WebUtility]::HtmlEncode("$($Report.Computer) | $($Report.User) | Elevated: $($Report.Elevated) | $($Report.StartedUtc)")+'</p>')
     $view=Get-AttackPathValue $Report 'CollectionView'
     if($view){[void]$html.Append('<p><strong>Collection view:</strong> '+[Net.WebUtility]::HtmlEncode($view)+'</p>')}
+    $footprint=Get-AttackPathValue $Report 'Footprint'
+    if($footprint){[void]$html.Append('<details><summary>Assessment footprint</summary><pre>'+[Net.WebUtility]::HtmlEncode(($footprint|ConvertTo-Json -Depth 6))+'</pre></details>')}
     [void]$html.Append('<section aria-labelledby="status-summary"><h2 id="status-summary">Check status summary</h2><table><thead><tr><th scope="col">Status</th><th scope="col">Count</th></tr></thead><tbody>')
     foreach($status in @('Completed','Partial','Skipped','Unsupported','Error')){
         $count=$Report.Summary[$status]
@@ -307,7 +355,7 @@ function Export-Assessment {
         [void]$html.Append('</article>')
     }
     [void]$html.Append('</html>')
-    [IO.File]::WriteAllText($htmlPath,$html.ToString())
+    Write-AssessmentText -Path $htmlPath -Text $html.ToString()
     Write-Host "Reports: $jsonPath and $htmlPath"
     Write-Host "Troubleshooting log: $($Paths.Log)"
 }
@@ -317,7 +365,7 @@ function Save-AssessmentJson {
     # Replace only after serialization and the complete write succeed.
     $temporary = $Path + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
     try {
-        $Report | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $temporary -Encoding UTF8 -ErrorAction Stop
+        Write-AssessmentText -Path $temporary -Text ($Report | ConvertTo-Json -Depth 16)
         Move-Item -LiteralPath $temporary -Destination $Path -Force -ErrorAction Stop
     } finally {
         if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
