@@ -20,12 +20,13 @@ function Invoke-ExecutionAnalysisCheck {
         }
         27 {
             $data=Get-ReferenceDocument $script:Context.VulnerabilityDatabasePath 'MSRC'
-            $assessment=if($data){@(Get-WindowsPatchAssessment $data.Entries (Get-WindowsVersionContext) @('CVE-2025-60710'))}else{@()}
+            $assessment=@(if($data){Get-WindowsPatchAssessment $data.Entries (Get-WindowsVersionContext) @('CVE-2025-60710')})
+            $assessmentStates=@($assessment | Select-Object -ExpandProperty State)
             foreach($task in Get-Limited @(Get-Tasks|Where-Object{($_.TaskPath+$_.TaskName)-match'(?i)Recall|PolicyConfiguration'})){
                 $system=$task.Principal.UserId-in@('SYSTEM','NT AUTHORITY\SYSTEM','S-1-5-18')
-                Add-Evidence ($task.TaskPath+$task.TaskName) 'Recall task configuration correlated with published CVE-2025-60710 fixed-build rules.' @{SystemPrincipal=$system;Enabled=($task.State-ne'Disabled');RunLevel=[string]$task.Principal.RunLevel;PatchAssessment=$assessment} $(if($system-and$task.State-ne'Disabled'-and'BelowPublishedFix'-in$assessment.State){'High'}else{'Information'})
+                Add-Evidence ($task.TaskPath+$task.TaskName) 'Recall task configuration correlated with published CVE-2025-60710 fixed-build rules.' @{SystemPrincipal=$system;Enabled=($task.State-ne'Disabled');RunLevel=[string]$task.Principal.RunLevel;PatchAssessment=$assessment} $(if($system-and$task.State-ne'Disabled'-and'BelowPublishedFix'-in$assessmentStates){'High'}else{'Information'})
             }
-            if(-not$assessment.Count-or'NoMatchingProductRule'-in$assessment.State){Set-CheckPartial 'Recall CVE applicability could not be established for this OS branch.'}
+            if(-not$assessment.Count-or'NoMatchingProductRule'-in$assessmentStates){Set-CheckPartial 'Recall CVE applicability could not be established for this OS branch.'}
         }
         30 {
             foreach($process in Get-Limited @(Get-CimInstance Win32_Process -ErrorAction Stop)){

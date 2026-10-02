@@ -447,44 +447,27 @@ Use a Windows 11 version and edition that is still receiving Microsoft security 
 
 The scanner uses bundled, dated MSRC, LOLDrivers, and LOLBAS snapshots. It does not refresh them during a scan. Missing, invalid, or older-than-30-day references produce `Partial` results. No driver binaries or LOLBAS command payloads are included. See [third-party notices](docs/THIRD-PARTY.md) for licenses and provenance.
 
-Update snapshots only when needed; the updater requires PowerShell 7 and accesses public sources:
-
-```powershell
-pwsh .\tools\Update-ReferenceData.ps1 -Drivers -Lolbas
-pwsh .\tools\Update-ReferenceData.ps1 -WindowsUpdates -Month <comma-separated-month-list>
-```
-
-The Windows updater merges refreshed months into the existing snapshot, preserving other historical records and their retrieval dates. Use `-ReplaceWindowsSnapshot` only to intentionally replace it with the requested months. Snapshot evidence includes exact source months, gaps between them, and retained-month retrieval dates when available. Gaps and stale retained months produce `Partial` results; a recent refresh does not establish complete historical coverage. `-DriverDatabasePath` and `-VulnerabilityDatabasePath` accept compatible local snapshots. Patch assessment uses OS product branch, architecture, role, and revision independently of scanner process bitness; it is not Microsoft's full applicability engine.
+Snapshot evidence includes exact source months, gaps between them, and retained-month retrieval dates when available. Gaps and stale retained months produce `Partial` results; a recent refresh does not establish complete historical coverage. Supply compatible, validated snapshots with `-DriverDatabasePath` and `-VulnerabilityDatabasePath`. The former maintenance updater is not included in this checkout. Patch assessment uses OS product branch, architecture, role, and revision independently of scanner process bitness; it is not Microsoft's full applicability engine. A scheduled [freshness workflow](.github/workflows/reference-freshness.yml) reports stale retrieval dates without modifying the snapshots.
 
 ## Validate
 
-The default validation matrix covers PowerShell 5.1 and 7 under both x64 and x86 processes. Windows PowerShell is discovered in native and WOW64 directories. PowerShell 7 is discovered in standard installation paths or supplied explicitly. To obtain a checksum-pinned portable x86 runtime and run the full matrix:
+CI-only scripts live under `.github/ci/`; runtime packages omit that directory. From a source checkout, use PowerShell 7 to install pinned test dependencies into a local results directory, then run a specific runtime cell:
 
 ```powershell
-$x86 = .\tools\Get-TestPowerShell.ps1 -Architecture x86
-.\tools\Test-Project.ps1 -PowerShell7X86Path $x86 -ResultsDirectory .\TestResults\local
+$modules = .\.github\ci\Bootstrap.ps1 -Destination .\TestResults\modules
+$runtime = .\.github\ci\Get-Runtime.ps1 -Version 7.6.6 -Architecture x64 -Destination .\TestResults\runtimes
+& $runtime -NoProfile -File .\.github\ci\Invoke-Validation.ps1 -ModulesDirectory $modules -ResultsDirectory .\TestResults\local -Cell local-7.6.6-x64 -ExpectedVersion 7.6.6 -ExpectedArchitecture x64
 ```
 
-The runner checks actual runtime versions and architectures, runs seven suites under each edition/architecture, and runs the PowerShell-7-only reference-updater suite under both PowerShell 7 architectures: 30 invocations total. It exits `0` only when all requested invocations pass. Missing or unusable runtimes produce `NOT RUN` rows and a nonzero exit code. Use `-Architecture x64` or `-Architecture x86` for a focused 15-invocation matrix; this does not credit the other architecture. `-ExpectedPlatform Windows11` or `-ExpectedPlatform Server2019` checks OS identity. `validation.json` records OS build, product type, architectures, runtime versions, duration and reproduction commands. Each suite has a configurable `-SuiteTimeoutSeconds` deadline (default 300).
-
-Run validation as a user with a loaded Windows profile: DPAPI fixtures can fail under sandbox or service tokens. The extended suite continues independent assertions after an unavailable DPAPI fixture but still exits nonzero; this is incomplete validation. Other failures may stop later assertions. Fixtures use a uniquely named temporary directory inside the repository and are removed afterward. Scanner checks intentionally marked `Skipped` inside gating tests are tested outcomes, not omitted automated tests. See [platform validation and runner setup](docs/PLATFORMS.md).
-
-To run one test script manually under a single edition (substitute `Test-Sources.ps1`, `Test-ExtendedChecks.ps1`, `Test-Diagnostics.ps1`, `Test-Verification.ps1`, or `Test-AttackPaths.ps1` as needed):
-
-```powershell
-pwsh -NoProfile -File .\tests\Test-StealthPrivesc.ps1
-powershell.exe -NoProfile -File .\tests\Test-StealthPrivesc.ps1
-```
-
-Tests cover synthetic DPAPI/AES-GCM secrets, deny/object-specific ACLs, exact patch/hash matching, kernel-vs-user CI rules, read-only SQLite, decompression bounds, redaction, CLI gating and report encoding. DPAPI fixtures require a loaded user profile and fail under some sandbox tokens. Live sensitive stores, every product and every AD/AD CS topology have not been validated in a representative lab.
+Validation checks the actual process version/architecture and records individual JUnit results, scoped command coverage, source-analysis diagnostics, per-check coverage gaps, and reproduction metadata. Missing suites, unexpected skips, insufficient test discovery, coverage below 80% in the targeted reference/verification helpers, and analyzer violations fail the cell. Structural coverage of all catalog IDs does not establish collector behavior on every host. See [CI contracts and limits](docs/CI.md) and [platform validation](docs/PLATFORMS.md).
 
 ## Continuous integration
 
-[GitHub Actions CI](.github/workflows/ci.yml) runs on pushes to `main`, pull requests targeting `main`, merge queues, manual dispatch, and a weekly schedule. Server 2022 and Server 2025 jobs each validate PowerShell 5.1 and 7 under x86 and x64 processes, producing 60 required invocations. CI downloads the pinned, checksum-verified portable x86 runtime. Suites cover source/native compilation, scanner behavior, diagnostics, verification, correlation, platform smoke checks and offline reference updates.
+[GitHub Actions CI](.github/workflows/ci.yml) defines 12 hosted cells: Server 2022/2025, Windows PowerShell 5.1 plus PowerShell 7.4.13/7.6.6, and x86/x64 processes. It runs on pushes to `main`, PRs targeting `main`, merge queues, manual dispatch and a weekly schedule. Portable runtimes are pinned and checksum-verified. Jobs exercise source/native compilation, offline diagnostics/redaction/report fixtures, real CLI selection, reference applicability, and clean runtime-archive validation.
 
-A separate job validates workflow syntax and expressions using a pinned, checksum-verified actionlint release. Action dependencies use immutable commit pins, with Dependabot proposing weekly updates. Jobs have timeouts, run with read-only repository permissions, and cancel superseded runs. Windows jobs continue independently after failures and publish a summary plus 14-day artifacts containing the console log and `validation.json`. Artifacts include the commands and runtime versions needed to reproduce failures; missing tests fail the build.
+Additional jobs validate workflow syntax, schemas, documentation, reference records, the read-only API contract, dependency changes, and CodeQL analysis of C# and Python. Native analysis compiles the exact shipped C# sources in an analysis-only project. Scan integration is blocked before scanner execution when the read-only contract fails.
 
-The separate [Windows platform validation workflow](.github/workflows/platform-validation.yml) provides manually dispatched Win11 and Server 2019 jobs on dedicated self-hosted machines. It verifies OS identity and records actual architecture results. Provision runners before dispatching; adding a workflow does not constitute an OS test pass. See [runner labels and setup](docs/PLATFORMS.md). After a successful hosted run, configure branch rules to require **CI**. Other editions and domain-specific behavior still need representative lab validation.
+The final **CI** job requires successful applicable jobs and complete individual-test evidence for every hosted cell. Dedicated [platform/lab validation](.github/workflows/platform-validation.yml) is main-ref/manual-only and verifies the actual OS and account context. Provision disposable runners before dispatching; missing environments remain unvalidated. Actions are pinned, permissions are scoped, jobs have deadlines, and failed cells retain 14-day artifacts. See [CI configuration](docs/CI.md) for merge enforcement and remaining coverage limits.
 
 ## License and notices
 

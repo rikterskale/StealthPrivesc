@@ -1,0 +1,71 @@
+name: Dedicated platform validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Provisioned disposable Windows test environment
+        type: choice
+        options: [Windows11, Server2019, DomainLab]
+        required: true
+        default: Windows11
+      context:
+        description: Actual runner account token (separate runner labels)
+        type: choice
+        options: [Both, Standard, Elevated]
+        required: true
+        default: Both
+
+permissions:
+  contents: read
+
+jobs:
+  platform:
+    # These jobs never execute PR code or a manually selected non-main ref.
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Windows, X64, '${{ format(''stealthprivesc-{0}-{1}'', inputs.platform, matrix.context) }}']
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        context: ${{ fromJSON(inputs.context == 'Both' && '["Standard","Elevated"]' || format('["{0}"]', inputs.context)) }}
+        version: ['5.1', '7.4.13', '7.6.6']
+        architecture: [x64, x86]
+    env:
+      CELL: ${{ inputs.platform }}-${{ matrix.context }}-${{ matrix.version }}-${{ matrix.architecture }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Prepare pinned runtimes and modules
+        id: runtime
+        run: |
+          & ./.github/ci/Bootstrap.ps1 -Destination "$env:RUNNER_TEMP/ci-modules"
+          $runtime = & ./.github/ci/Get-Runtime.ps1 -Version '${{ matrix.version }}' -Architecture '${{ matrix.architecture }}' -Destination "$env:RUNNER_TEMP/ci-runtimes"
+          "path=$runtime" >> $env:GITHUB_OUTPUT
+      - name: Run offline suites in the requested process architecture
+        timeout-minutes: 10
+        run: |
+          $runtime = '${{ steps.runtime.outputs.path }}'
+          $env:PSModulePath = (Join-Path (Split-Path $runtime) 'Modules') + [IO.Path]::PathSeparator + $env:PSModulePath
+          New-Item -ItemType Directory -Path "TestResults/$env:CELL" -Force | Out-Null
+          & $runtime -NoLogo -NoProfile -NonInteractive -File .github/ci/Invoke-Validation.ps1 -ModulesDirectory "$env:RUNNER_TEMP/ci-modules" -ResultsDirectory "TestResults/$env:CELL" -Cell $env:CELL -ExpectedVersion '${{ matrix.version }}' -ExpectedArchitecture '${{ matrix.architecture }}' 2>&1 | Tee-Object "TestResults/$env:CELL/validation.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Dedicated offline validation failed.' }
+      - name: Verify actual OS, identity context, scopes and collector outcomes
+        if: always()
+        timeout-minutes: 15
+        run: |
+          & '${{ steps.runtime.outputs.path }}' -NoLogo -NoProfile -NonInteractive -File .github/ci/Invoke-Integration.ps1 -ResultsDirectory "TestResults/$env:CELL/integration" -Platform '${{ inputs.platform }}' -Context '${{ matrix.context }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Dedicated integration was blocked or failed.' }
+      - name: Preserve platform validation evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: platform-${{ env.CELL }}
+          path: TestResults/${{ env.CELL }}/
+          retention-days: 30
+          if-no-files-found: error

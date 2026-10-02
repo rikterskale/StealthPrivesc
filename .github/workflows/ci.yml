@@ -1,0 +1,222 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 8 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  contracts:
+    name: Repository and read-only contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Install pinned checker dependencies
+        run: 'python -m pip install --only-binary=:all: -r .github/ci/requirements.txt'
+      - name: Test the checker against false-pass scenarios
+        run: python -m unittest discover -s .github/ci -p test_repository_checks.py -v
+      - name: Check catalog, reference data, documentation and workflow pins
+        run: python .github/ci/repository_checks.py repository
+      - name: Enforce the read-only native contract
+        run: python .github/ci/repository_checks.py readonly
+
+  workflows:
+    name: Workflow validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run checksum-verified actionlint
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            --output "$RUNNER_TEMP/actionlint.tar.gz"
+          printf '%s  %s\n' '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' \
+            "$RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color
+
+  windows:
+    name: Windows (${{ matrix.os }}, PS ${{ matrix.version }}, ${{ matrix.architecture }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+        version: ['5.1', '7.4.13', '7.6.6']
+        architecture: [x64, x86]
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CELL: ${{ matrix.os }}-${{ matrix.version }}-${{ matrix.architecture }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Prepare exact runtime and isolated modules
+        id: runtime
+        run: |
+          & ./.github/ci/Bootstrap.ps1 -Destination "$env:RUNNER_TEMP/ci-modules"
+          $runtime = & ./.github/ci/Get-Runtime.ps1 -Version '${{ matrix.version }}' -Architecture '${{ matrix.architecture }}' -Destination "$env:RUNNER_TEMP/ci-runtimes"
+          "path=$runtime" >> $env:GITHUB_OUTPUT
+          python -m pip install --only-binary=:all: -r .github/ci/requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Checker dependency installation failed.' }
+      - name: Source, offline behavior, redaction and coverage suites
+        timeout-minutes: 10
+        run: |
+          $runtime = '${{ steps.runtime.outputs.path }}'
+          $env:PSModulePath = (Join-Path (Split-Path $runtime) 'Modules') + [IO.Path]::PathSeparator + $env:PSModulePath
+          New-Item -ItemType Directory -Path "TestResults/$env:CELL" -Force | Out-Null
+          & $runtime -NoLogo -NoProfile -NonInteractive -File .github/ci/Invoke-Validation.ps1 -ModulesDirectory "$env:RUNNER_TEMP/ci-modules" -ResultsDirectory "TestResults/$env:CELL" -Cell $env:CELL -ExpectedVersion '${{ matrix.version }}' -ExpectedArchitecture '${{ matrix.architecture }}' 2>&1 | Tee-Object "TestResults/$env:CELL/validation.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Required suites or source analysis failed.' }
+      - name: Validate the generated report against its schema
+        if: always()
+        run: |
+          python .github/ci/repository_checks.py report --path "TestResults/$env:CELL/report-fixture.json" --expected 1
+          if ($LASTEXITCODE -ne 0) { throw 'Generated report contract failed.' }
+      - name: Validate a clean runtime archive
+        if: always()
+        run: |
+          & '${{ steps.runtime.outputs.path }}' -NoLogo -NoProfile -NonInteractive -File .github/ci/Test-Package.ps1 -Destination "$env:RUNNER_TEMP/package-$env:CELL" -ResultsDirectory "TestResults/$env:CELL"
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime package validation failed.' }
+      - name: Bounded scanner integration after the read-only guard
+        if: always()
+        timeout-minutes: 10
+        run: |
+          & '${{ steps.runtime.outputs.path }}' -NoLogo -NoProfile -NonInteractive -File .github/ci/Invoke-Integration.ps1 -ResultsDirectory "TestResults/$env:CELL/integration" -Platform Hosted
+          if ($LASTEXITCODE -ne 0) { throw 'Scanner integration was blocked or failed.' }
+      - name: Publish cell summary
+        if: always()
+        run: |
+          $path = "TestResults/$env:CELL/validation.json"
+          if (-not (Test-Path $path)) { throw 'Required matrix evidence was not produced.' }
+          $result = Get-Content $path -Raw | ConvertFrom-Json
+          "### $env:CELL" >> $env:GITHUB_STEP_SUMMARY
+          "Passed $($result.Passed)/$($result.Total); failed $($result.Failed); skipped $($result.Skipped); not run $($result.NotRun)." >> $env:GITHUB_STEP_SUMMARY
+          "Scoped command coverage: $($result.CoveragePercent)% (required $($result.CoverageTarget)%)." >> $env:GITHUB_STEP_SUMMARY
+          foreach ($failure in $result.NonTestFailures) { "- $failure" >> $env:GITHUB_STEP_SUMMARY }
+      - name: Retain individual results, logs, coverage and reproduction metadata
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: validation-${{ env.CELL }}
+          path: TestResults/${{ env.CELL }}/
+          if-no-files-found: error
+          retention-days: 14
+
+  source-analysis:
+    name: Source analysis (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [csharp, python]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        if: matrix.language == 'csharp'
+        with:
+          dotnet-version: '8.0.x'
+      - uses: github/codeql-action/init@7999b86c43a865dc79d8923397f35af22de63401 # v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.language == 'csharp' && 'manual' || 'none' }}
+          queries: security-extended
+      - name: Compile every shipped native source for analysis only
+        if: matrix.language == 'csharp'
+        run: dotnet build .github/ci/NativeAnalysis.csproj --configuration Release --nologo
+      - uses: github/codeql-action/analyze@7999b86c43a865dc79d8923397f35af22de63401 # v4
+        with:
+          category: /language:${{ matrix.language }}
+
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+
+  ci:
+    name: CI
+    if: always()
+    needs: [contracts, workflows, windows, source-analysis, dependency-review]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - run: 'python -m pip install --only-binary=:all: -r .github/ci/requirements.txt'
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          pattern: validation-*
+          path: TestResults/matrix
+      - name: Require every matrix cell and its individual results
+        run: |
+          python .github/ci/repository_checks.py results --path TestResults/matrix --expected \
+            windows-2022-5.1-x64 windows-2022-5.1-x86 \
+            windows-2022-7.4.13-x64 windows-2022-7.4.13-x86 \
+            windows-2022-7.6.6-x64 windows-2022-7.6.6-x86 \
+            windows-2025-5.1-x64 windows-2025-5.1-x86 \
+            windows-2025-7.4.13-x64 windows-2025-7.4.13-x86 \
+            windows-2025-7.6.6-x64 windows-2025-7.6.6-x86
+      - name: Require all applicable jobs to succeed
+        env:
+          CONTRACTS: ${{ needs.contracts.result }}
+          WORKFLOWS: ${{ needs.workflows.result }}
+          WINDOWS: ${{ needs.windows.result }}
+          ANALYSIS: ${{ needs.source-analysis.result }}
+          DEPENDENCIES: ${{ needs.dependency-review.result }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          test "$CONTRACTS" = success
+          test "$WORKFLOWS" = success
+          test "$WINDOWS" = success
+          test "$ANALYSIS" = success
+          if [ "$EVENT" = pull_request ]; then
+            test "$DEPENDENCIES" = success
+          else
+            test "$DEPENDENCIES" = skipped
+          fi

@@ -59,13 +59,13 @@ function Invoke-StealthPrivesc {
         }
         $phase = 'Initialization'
         if ($env:OS -ne 'Windows_NT') { throw [PlatformNotSupportedException]::new('Scanning requires Windows. -ListChecks can be used on other platforms.') }
-        foreach ($nativeType in @('Native','NativeInspection','NativeObjects','NativeConsole')) {
+        foreach ($nativeType in @('Native','NativeInspection','NativeObjects','Console')) {
             if (-not ("StealthPrivesc.$nativeType" -as [type])) {
                 Write-Verbose "Loading native support: $nativeType"
-                Add-Type -Path (Join-Path $script:ModuleRoot "$nativeType.cs") -ErrorAction Stop
+                $nativeSource = if ($nativeType -eq 'Console') { 'NativeConsole.cs' } else { "$nativeType.cs" }
+                Add-Type -Path (Join-Path $script:ModuleRoot $nativeSource) -ErrorAction Stop
             }
         }
-        try { if (-not $script:StealthAmsiApplied) { [void][StealthPrivesc.Console]::Amsi(); $script:StealthAmsiApplied = $true } } catch { Write-Verbose "AMSI bypass unavailable here: $($_.Exception.Message)" }
         $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
         $principal = New-Object Security.Principal.WindowsPrincipal($identity)
         $script:Context = @{

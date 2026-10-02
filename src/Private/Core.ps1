@@ -195,17 +195,18 @@ function Add-ExecutableAccess {
 function Invoke-ReadOnlyCommand {
     param([string]$FileName, [string]$Arguments, [string]$Payload, [string]$HostPath)
     if ($null -ne $Payload -and $Payload.Length -gt 0) {
-        # Hidden neutral helper: PowerShell reads the script from standard input (-Command -), so no base64 beacon lands on the command line.
+        # Read the complete script from standard input without recording its contents.
         $target = if ($null -ne $HostPath -and $HostPath.Length -gt 0) { $HostPath } else { (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') }
-        $command = '& ' + (ConvertTo-VerificationLiteral $target) + ' -STA -Command -'
-        Add-CheckCommand PowerShell $command -Detail 'Hidden helper: the script is delivered on standard input, so no -EncodedCommand beacon appears on the command line. A start failure, nonzero exit or timeout is reported in Diagnostics.'
-        if (-not ('StealthPrivesc.NativeConsole' -as [type])) { Add-Type -Path (Join-Path $script:ModuleRoot 'NativeConsole.cs') -ErrorAction Stop }
+        $reader = '[Console]::InputEncoding = [Text.Encoding]::UTF8; [Console]::OutputEncoding = [Text.Encoding]::UTF8; & ([scriptblock]::Create([Console]::In.ReadToEnd()))'
+        $command = '& ' + (ConvertTo-VerificationLiteral $target) + ' -STA -NoLogo -NoProfile -NonInteractive -Command ' + (ConvertTo-VerificationLiteral $reader)
+        Add-CheckCommand PowerShell $command -Detail 'Helper reads the complete UTF-8 script from standard input; script contents are omitted. Use the check rerun command to reproduce the query. A start failure, nonzero exit or timeout is reported in Diagnostics.'
+        if (-not ('StealthPrivesc.Console' -as [type])) { Add-Type -Path (Join-Path $script:ModuleRoot 'NativeConsole.cs') -ErrorAction Stop }
         [StealthPrivesc.Console]::Ps($target, $Payload, $script:Context.CommandTimeoutSeconds, 8MB)
         return
     }
     $recordedArguments = Get-HelperVerificationArguments $FileName $Arguments
     Add-CheckCommand Process (('& ' + (ConvertTo-VerificationLiteral $FileName) + ' ' + $recordedArguments).TrimEnd()) -Detail 'ProcessStartInfo invocation with UseShellExecute=false, displayed in PowerShell syntax for manual use. Arguments are verbatim only for known fixed queries; other payloads are redacted. A start failure, nonzero exit or timeout is reported in Diagnostics.'
-    if (-not ('StealthPrivesc.NativeConsole' -as [type])) { Add-Type -Path (Join-Path $script:ModuleRoot 'NativeConsole.cs') -ErrorAction Stop }
+    if (-not ('StealthPrivesc.Console' -as [type])) { Add-Type -Path (Join-Path $script:ModuleRoot 'NativeConsole.cs') -ErrorAction Stop }
     [StealthPrivesc.Console]::Run($FileName, $Arguments, $script:Context.CommandTimeoutSeconds, 8MB)
 }
 function Find-SecretMarkers {
