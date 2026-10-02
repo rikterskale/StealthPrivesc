@@ -34,7 +34,7 @@ Required stages are:
    no CI-only directories, and catalog listing through the actual launcher.
 8. Scan integration: read-only guard first, then selected IDs, status/error counts,
    opt-in gates and JSON/HTML/log artifacts. A completed runner with collector
-   errors is a failure. Current mutation APIs block this stage before execution.
+   errors is a failure. Native mutation APIs block this stage before execution.
 9. CodeQL C# and Python analysis. The [analysis project](../.github/ci/NativeAnalysis.csproj)
    compiles the exact shipped C# sources, including files normally compiled by
    `Add-Type`, without running native methods. Dependency review applies to PRs.
@@ -96,6 +96,5 @@ block merging.
 
 Workflow changes do not reach GitHub until committed and pushed. Hosted validation
 and actual runner evidence must be inspected before calling this implementation
-fully validated. The read-only gate currently detects process-memory mutation in
-`src/NativeConsole.cs`; that product contract failure must be resolved rather than
+fully validated. Read-only contract failures must be resolved rather than
 suppressed or treated as an environmental skip.

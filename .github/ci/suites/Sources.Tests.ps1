@@ -65,6 +65,20 @@ Describe 'Source, manifest and dispatch contracts' {
         })
         $found.Count | Should -Be 0
     }
+
+    It 'Reuses compiled support across repeated native and PowerShell helper calls' {
+        Mock Add-Type -ModuleName StealthPrivesc { throw 'Native support was already compiled.' }
+        $hostPath = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+        & $script:ScannerModule {
+            param($HostPath)
+            $script:Context = @{CommandTimeoutSeconds=15}
+            $script:Current = @{}
+            1..2 | ForEach-Object {
+                (Invoke-ReadOnlyCommand -FileName (Join-Path $env:SystemRoot 'System32/cmd.exe') -Arguments '/d /c echo CI_HELPER_OUTPUT').Trim() | Should -BeExactly 'CI_HELPER_OUTPUT'
+                (Invoke-ReadOnlyCommand -HostPath $HostPath -Payload "[System.Console]::WriteLine('CI_HELPER_OUTPUT')`n").Trim() | Should -BeExactly 'CI_HELPER_OUTPUT'
+            }
+        } $hostPath
+    }
 }
 
 Describe 'Real CLI selection without running collectors' {

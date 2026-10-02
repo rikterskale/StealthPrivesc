@@ -87,6 +87,7 @@ function Invoke-ExecutionCheck {
     }
 }
 function Get-SearchRoots {
-    if($script:Context.SearchRoot.Count){return $script:Context.SearchRoot}
+    $roots = @($script:Context.SearchRoot | Where-Object { $_ })
+    if($roots.Count){return $roots}
     @($env:ProgramData,(Join-Path $env:USERPROFILE 'Documents'))
 }

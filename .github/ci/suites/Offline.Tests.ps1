@@ -79,6 +79,33 @@ Describe 'Offline diagnostics, limits and redaction' {
         }
     }
 
+    It 'Uses default search roots for omitted or empty selectors and preserves explicit roots' {
+        & $script:ScannerModule {
+            $expected = @($env:ProgramData,(Join-Path $env:USERPROFILE 'Documents'))
+            foreach ($empty in @($null,@(),@($null),@(''))) {
+                $script:Context.SearchRoot = $empty
+                @(Get-SearchRoots) | Should -Be $expected
+            }
+            $script:Context.SearchRoot = @('C:\CI fixture one','C:\CI fixture two')
+            @(Get-SearchRoots) | Should -Be $script:Context.SearchRoot
+        }
+    }
+
+    It 'Retains Recall task evidence without claiming patch applicability when reference data is absent' {
+        Mock Get-ReferenceDocument -ModuleName StealthPrivesc { $null }
+        Mock Get-Tasks -ModuleName StealthPrivesc {
+            [pscustomobject]@{TaskPath='\Recall\';TaskName='PolicyConfiguration';State='Ready';Principal=[pscustomobject]@{UserId='SYSTEM';RunLevel='Highest'}}
+        }
+        & $script:ScannerModule {
+            $script:Context.VulnerabilityDatabasePath = 'missing-ci-reference.json'
+            Invoke-ExecutionAnalysisCheck 27
+            $script:Current.Status | Should -Be 'Partial'
+            $script:Current.Findings.Count | Should -Be 1
+            $script:Current.Findings[0].Severity | Should -Be 'Information'
+            @($script:Current.Findings[0].Evidence.PatchAssessment).Count | Should -Be 0
+        }
+    }
+
     It 'Finds synthetic secret indicators without copying matched values' {
         $path=Join-Path $TestDrive 'settings.env'
         [IO.File]::WriteAllText($path,'password=CANARY_FILE_SECRET; api_key=CANARY_FILE_SECRET')
